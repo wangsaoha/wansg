@@ -10,7 +10,7 @@ const fs = require('fs'), path = require('path');
   const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto('http://127.0.0.1:8765/index.html');
+  await page.goto('http://127.0.0.1:8765/' + (process.env.PAGE || 'index.html'));
   await page.waitForFunction(() => window.ready === true, null, { timeout: 60000 });
   const grab = async (t, dur) => {
     const url = await page.evaluate(([t, dur]) => { renderFrame(t, dur); return document.querySelector('canvas').toDataURL('image/png'); }, [t, dur]);
