@@ -12,22 +12,22 @@ const P = (x, z) => [(x + BW / 2) * PX, (z + BD / 2) * PX];
 const U1 = { x: 0, z: -6 };
 const pin = (n) => n <= 4 ? [U1.x - 1.5 + (n - 1), U1.z + 1.6] : [U1.x + 1.5 - (n - 5), U1.z - 1.6];
 
-// 笑脸 LED：两只眼睛各 2 颗，嘴巴 8 颗，分成 4 串，每串 3 颗 + 1 个限流电阻
-const LED_POS = [
-  [-2.3, 2.6], [-2.3, 3.8],                      // 左眼
-  ...Array.from({ length: 8 }, (_, i) => { const a = (20 + i * 20) * Math.PI / 180; return [-4.4 * Math.cos(a), 7.2 + 3.8 * Math.sin(a)]; }),
-  [2.3, 3.8], [2.3, 2.6],                        // 右眼
-];
-// 嘴巴从左到右是 LED 2..9
-const STRINGS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]];
+// 笑脸 LED：两只眼睛各 1 颗，嘴巴 6 颗；分成 4 串，每串 2 颗 + 1 个 330Ω 限流电阻
+// 下标：0 左眼，1 右眼，2..7 嘴巴从左到右
+const MOUTH = Array.from({ length: 6 }, (_, i) => { const a = (25 + i * 26) * Math.PI / 180; return [-5.2 * Math.cos(a), 6.6 + 4.2 * Math.sin(a)]; });
+const LED_POS = [[-3.2, 3.4], [3.2, 3.4], ...MOUTH];
+const STRINGS = [[0, 2], [3, 4], [6, 5], [1, 7]];
+// 每颗 LED 两个脚：A（正极，靠上）和 K（负极，靠下）
+const LA = (i) => [LED_POS[i][0], LED_POS[i][1] - 0.45];
+const LK = (i) => [LED_POS[i][0], LED_POS[i][1] + 0.45];
 const R_LED_X = [-6, -2, 2, 6];
 
 // 走线：{ pts, layer: 'top' | 'bot', net, order }  order 用来控制“画线”动画的先后
 export const TRACES = [];
 const T = (net, layer, ...pts) => TRACES.push({ net, layer, pts, order: TRACES.length });
 // 电源
-T('vcc', 'top', [-8.7, -14.2], [-8.7, -15.2], [-4, -15.2], [-4, -14.2]);       // J1+ → SW1
-T('vcc', 'top', [-2, -14.2], [-2, -12.2], [-9, -12.2]);                         // SW1 → VCC 母线
+T('bat', 'top', [-8.7, -14.2], [-8.7, -15.2], [-4, -15.2], [-4, -14.2]);       // J1+ → SW1
+T('vcc', 'top', [-2, -14.2], [-2, -12.2]);                                      // SW1 → VCC 母线
 T('vcc', 'top', [-9, -12.2], [9, -12.2]);
 T('gnd', 'top', [-10, -13], [-10, 14.5], [10, 14.5], [10, -10]);                // GND 环
 T('gnd', 'bot', [-7.3, -14.2], [-7.3, -13], [-10, -13]);                        // J1- → GND
@@ -36,10 +36,10 @@ T('vcc', 'bot', pin(8), [pin(8)[0], -12.2]);                                    
 T('vcc', 'bot', pin(4), [2.6, pin(4)[1]], [2.6, -12.2]);                        // 4 → VCC
 T('ctl', 'top', pin(5), [4.2, pin(5)[1]]);                                      // 5 → C2
 T('gnd', 'top', [5.4, pin(5)[1]], [10, pin(5)[1]]);                             // C2 → GND
-T('dis', 'top', [-6, -9.6], [-6, -12.2]);                                       // R1 → VCC
+T('vcc', 'top', [-6, -9.6], [-6, -12.2]);                                       // R1 → VCC
 T('dis', 'top', [-3, -9.6], [pin(7)[0], -9.6], pin(7));                         // R1 → 7
-T('dis', 'top', [-4.5, -7.4], [-4.5, -9.6]);                                    // R2 → 7
-T('thr', 'top', [-4.5, -4.4], [-4.5, -3.2], [pin(2)[0], -3.2], pin(2));         // R2 → 2
+T('dis', 'top', [-4.5, -7.4], [-4.5, -8.4], [pin(7)[0], -8.4]);                 // R2 → 7
+T('thr', 'bot', [-4.5, -4.4], [-4.5, -3.2], [pin(2)[0], -3.2], pin(2));         // R2 → 2（走背面，避开 1 脚的地线）
 T('thr', 'bot', pin(6), [pin(6)[0], -6], [pin(2)[0], -6], pin(2));              // 6 ↔ 2
 T('thr', 'top', [-6.2, -4.4], [-4.5, -4.4]);                                    // C1+ → R2
 T('gnd', 'top', [-7.8, -4.4], [-10, -4.4]);                                     // C1- → GND
@@ -49,10 +49,10 @@ T('out', 'top', [-6, -1.4], [6, -1.4]);
 // LED 串
 STRINGS.forEach((s, k) => {
   const rx = R_LED_X[k];
-  const first = LED_POS[s[0]];
+  const first = LA(s[0]);
   T('led' + k, k === 1 || k === 2 ? 'bot' : 'top', [rx, 1.6], [rx, (first[1] + 1.6) / 2], [first[0], (first[1] + 1.6) / 2], first);
-  for (let i = 0; i < 2; i++) T('led' + k, 'top', LED_POS[s[i]], LED_POS[s[i + 1]]);
-  const last = LED_POS[s[2]];
+  for (let i = 0; i < s.length - 1; i++) T('led' + k, 'top', LK(s[i]), LA(s[i + 1]));
+  const last = LK(s[s.length - 1]);
   if (k === 0) T('gnd', 'top', last, [-10, last[1]]);
   else if (k === 3) T('gnd', 'top', last, [10, last[1]]);
   else T('gnd', 'top', last, [last[0], 14.5]);
@@ -66,11 +66,13 @@ for (let n = 1; n <= 8; n++) pad(...pin(n), n === 1);
 [[-8.7, -14.2], [-7.3, -14.2], [-4, -14.2], [-2, -14.2], [-6, -9.6], [-3, -9.6], [-4.5, -7.4], [-4.5, -4.4],
   [-6.2, -4.4], [-7.8, -4.4], [4.2, -7.6], [5.4, -7.6]].forEach(([x, z]) => pad(x, z));
 R_LED_X.forEach((x) => { pad(x, -1.4); pad(x, 1.6); });
-LED_POS.forEach(([x, z]) => pad(x, z));
+LED_POS.forEach((_, i) => { pad(...LA(i)); pad(...LK(i), true); });
+// 过孔：背面走线接到顶层母线的地方
+export const VIAS = [[pin(8)[0], -12.2], [2.6, -12.2], [-10, -13]];
 
 const LABELS = [
   ['J1 +9V', -8, -15.9], ['SW1', -3, -15.9], ['U1 NE555', 3.4, -4.1], ['R1 10k', -4.5, -10.5], ['R2', -5.75, -6.3],
-  ['C1 10µ', -7, -3.3], ['C2 10n', 7.4, -8.6], ['R3', -6.9, 0.1], ['R4', -2.9, 0.1], ['R5', 1.1, 0.1], ['R6', 5.1, 0.1],
+  ['C1 10µ', -7, -3.3], ['C2 10n', 7.4, -8.6], ['R3 330', -7.9, 0.1], ['R4', -2.9, 0.1], ['R5', 1.1, 0.1], ['R6', 5.1, 0.1],
 ];
 
 // ---------- 贴图 ----------
@@ -116,10 +118,14 @@ function drawBoard(g, s) {
   // 焊盘
   PADS.forEach(({ x, z, sq }) => {
     const [px, py] = P(x, z); g.fillStyle = '#E2C77C';
-    if (sq) g.fillRect(px - 22, py - 22, 44, 44); else { g.beginPath(); g.arc(px, py, 22, 0, 7); g.fill(); }
+    if (sq) g.fillRect(px - 20, py - 20, 40, 40); else { g.beginPath(); g.arc(px, py, 20, 0, 7); g.fill(); }
     g.fillStyle = '#4A3A20'; g.beginPath(); g.arc(px, py, 8, 0, 7); g.fill();
   });
-  // 过孔和安装孔
+  VIAS.forEach(([x, z]) => {
+    const [px, py] = P(x, z); g.fillStyle = '#E2C77C'; g.beginPath(); g.arc(px, py, 17, 0, 7); g.fill();
+    g.fillStyle = '#2A2A2A'; g.beginPath(); g.arc(px, py, 7, 0, 7); g.fill();
+  });
+  // 安装孔
   [[-9.6, -15], [9.6, -15], [-9.6, 15], [9.6, 15]].forEach(([x, z]) => {
     const [px, py] = P(x, z); g.fillStyle = '#E2C77C'; g.beginPath(); g.arc(px, py, 42, 0, 7); g.fill();
     g.fillStyle = '#2A2A2A'; g.beginPath(); g.arc(px, py, 26, 0, 7); g.fill();
@@ -130,7 +136,12 @@ function drawBoard(g, s) {
   LABELS.forEach(([t, x, z]) => g.fillText(t, ...P(x, z)));
   g.strokeRect(...P(U1.x - 2.4, U1.z - 2.4), 4.8 * PX, 4.8 * PX);
   g.font = 'bold 44px "DejaVu Sans", sans-serif'; g.fillText('XIAOKE-555 BLINKY v1.0', ...P(0, 15.5));
-  LED_POS.forEach(([x, z]) => { g.beginPath(); g.arc(...P(x, z), 0.62 * PX, 0, 7); g.stroke(); });
+  LED_POS.forEach(([x, z]) => { g.beginPath(); g.arc(...P(x, z), 0.75 * PX, 0, 7); g.stroke(); });
+  // 自定义丝印
+  g.font = 'bold 110px "WenQuanYi Zen Hei", sans-serif'; g.fillText('呆唯', ...P(-6.2, 12.0));
+  const heart = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
+  const [hx, hy] = P(-3.3, 11.4);
+  heart.forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') g.fillRect(hx + i * 11, hy + j * 11, 10, 10); }));
 }
 
 function drawGlow(g, s) {
@@ -213,7 +224,7 @@ export function makePCB() {
   // 电阻
   place(resistor(3, ['#8B5A2B', '#1A1A1A', '#E8862A', '#C8A040']), -4.5, -9.6, 'R1');
   place(resistor(3, ['#F2D23A', '#7A3FB0', '#E8862A', '#C8A040']), -4.5, -5.9, 'R2', Math.PI / 2);
-  R_LED_X.forEach((x, i) => place(resistor(3, ['#D23B3B', '#D23B3B', '#8B5A2B', '#C8A040']), x, 0.1, 'R' + (3 + i), Math.PI / 2));
+  R_LED_X.forEach((x, i) => place(resistor(3, ['#E8862A', '#E8862A', '#8B5A2B', '#C8A040']), x, 0.1, 'R' + (3 + i), Math.PI / 2));
   // C1：电解电容
   const c1 = new THREE.Group();
   const cb = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 2.6, 28), mat('#2B4A9C', 0.35)); cb.position.y = 1.3; c1.add(cb);

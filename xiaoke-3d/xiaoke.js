@@ -48,7 +48,7 @@ export function makeXiaoke() {
 
   const legs = [];
   [-3.5, -1.5, 1.5, 3.5].forEach((x, i) => [-1.6, 1.6].forEach((z, j) => {
-    const l = box(1, 2.2, 1, C.shade, 0.2); l.position.set(x, 1.1, z); root.add(l); legs.push({ m: l, phase: (i + j) % 2 });
+    const l = box(1, 2.2, 1, C.shade, 0.2); l.position.set(x, 1.1, z); root.add(l); legs.push({ m: l, phase: (i + j) % 2, x, z });
   }));
 
   // 侦探帽（默认隐藏）
@@ -59,7 +59,8 @@ export function makeXiaoke() {
   hat.visible = false;
 
   function setPose(p = {}) {
-    const q = Object.assign({ lift: 0, squash: 0, armL: 0, armR: 0, eyes: 'open', mouth: 'smile', walk: 0, lookX: 0, hat: null }, p);
+    // walk：走路相位（弧度），walkDir：'side' 横着走（螃蟹步）或 'fwd' 向前走
+    const q = Object.assign({ lift: 0, squash: 0, armL: 0, armR: 0, eyes: 'open', mouth: 'smile', walk: 0, walkDir: 'side', lookX: 0, hat: null }, p);
     torso.position.y = q.lift;
     torso.scale.set(1 + q.squash, 1 - q.squash, 1 + q.squash);
     arms[0].rotation.z = -q.armL; arms[1].rotation.z = q.armR;
@@ -68,7 +69,14 @@ export function makeXiaoke() {
     else eyes.open.forEach((e) => e.scale.set(1, 1, 1));
     for (const k in mouths) mouths[k].visible = k === q.mouth;
     face.position.x = q.lookX * 0.8;
-    legs.forEach(({ m, phase }) => (m.position.y = 1.1 + (q.walk ? Math.max(0, Math.sin(q.walk + phase * Math.PI)) * 0.6 : 0)));
+    // 两组腿交替：一组抬起往前迈，另一组踩在地上往后蹬
+    legs.forEach(({ m, phase, x, z }) => {
+      const ph = q.walk + phase * Math.PI;
+      const up = q.walk ? Math.max(0, Math.sin(ph)) * 0.9 : 0, swing = q.walk ? -Math.cos(ph) * 0.45 : 0;
+      m.position.set(x + (q.walkDir === 'side' ? swing : 0), 1.1 + up, z + (q.walkDir === 'fwd' ? swing : 0));
+    });
+    if (q.walk) { torso.position.y += Math.abs(Math.sin(q.walk)) * 0.35; torso.rotation.z = q.walkDir === 'side' ? Math.sin(q.walk) * 0.05 : 0; torso.rotation.x = q.walkDir === 'fwd' ? Math.sin(q.walk) * 0.04 : 0; }
+    else torso.rotation.set(0, 0, 0);
     hat.visible = q.hat != null; if (hat.visible) hat.position.y = 8 + q.hat;
   }
   setPose();

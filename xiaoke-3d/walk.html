@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#FFF1E0;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+<script type="module">
+// 走路测试：先横着走（螃蟹步），再转身向前走
+import { createStage } from './stage.js';
+const { renderer, scene, camera, pcb, xk } = createStage();
+const seg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+xk.root.scale.setScalar(0.4);
+pcb.setState({ traces: 1, glow: 0, leds: 0 });
+
+window.renderFrame = (t) => {
+  let x, ry = 0, pose = { eyes: 'open', mouth: 'smile' };
+  const Z = 12.9, STEP = Math.PI * 2 * 1.8; // 每秒 1.8 步
+  if (t < 2.4) { x = -7 + 10 * (t / 2.4); pose = { ...pose, walk: t * STEP, walkDir: 'side', lookX: 0.6 }; }
+  else if (t < 2.9) { x = 3; ry = ease(seg(t, 2.4, 2.9)) * Math.PI / 2; pose.eyes = 'happy'; }
+  else if (t < 4.4) { x = 3 + 5 * ((t - 2.9) / 1.5); ry = Math.PI / 2; pose = { ...pose, walk: t * STEP, walkDir: 'fwd' }; }
+  else { x = 8; ry = Math.PI / 2 * (1 - ease(seg(t, 4.4, 4.8))); const h = Math.sin(seg(t, 4.75, 5.2) * Math.PI); pose = { eyes: 'happy', mouth: 'open', lift: h * 2.5, armL: h * 1.4, armR: h * 1.4 }; }
+  xk.root.position.set(x, 0, Z); xk.root.rotation.y = ry;
+  xk.setPose(pose);
+  camera.position.set(x * 0.55, 16, Z + 22); camera.lookAt(x * 0.7, 1.5, Z - 1);
+  renderer.render(scene, camera);
+};
+window.renderFrame(0);
+window.ready = true;
+</script>
