@@ -8,6 +8,7 @@ for i in 0 1 2 3; do
 done
 wait
 printf "file 'part0.mp4'\nfile 'part1.mp4'\nfile 'part2.mp4'\nfile 'part3.mp4'\n" > parts.txt
-ffmpeg -y -loglevel error -f concat -safe 0 -i parts.txt -i music.wav -c:v copy -c:a aac -b:a 160k -shortest promo_40s.mp4
+# 纸张颗粒每帧都变，用 crf 24 重新压缩，体积小很多、肉眼看不出差别
+ffmpeg -y -loglevel error -f concat -safe 0 -i parts.txt -i music.wav -c:v libx264 -crf 24 -preset slow -pix_fmt yuv420p -c:a aac -b:a 160k -shortest promo_40s.mp4
 rm -f part*.mp4 part*.log parts.txt
 ffprobe -v error -show_entries format=duration -of csv=p=0 promo_40s.mp4
