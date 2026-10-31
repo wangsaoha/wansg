@@ -1,0 +1,252 @@
+<!doctype html><meta charset="utf-8">
+<style>
+@font-face { font-family: 'Serif'; src: url(assets/fonts/serif-400.woff2) format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Serif'; src: url(assets/fonts/serif-600.woff2) format('woff2'); font-weight: 600; }
+html, body { margin: 0; background: #000; } canvas { display: block; }
+</style>
+<canvas id="out" width="1080" height="1920"></canvas>
+<script src="assets/xiaoke2d.js"></script>
+<script>
+// 宣传片：暖白留白 + 衬线字 + 细线条，动作缓慢克制（粉丝自制）
+const W = 1080, H = 1920, M = 110;
+const ctx = document.getElementById('out').getContext('2d');
+const C = { bg: '#F4F0E6', ink: '#1F1D1A', mute: '#7A7368', line: '#2B2925', accent: '#C8643F', card: '#FBF9F4' };
+const F = (w, px) => `${w} ${px}px Serif`;
+
+// ---------- 工具 ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (k) => 1 - Math.pow(1 - k, 3);                 // 缓出
+const inOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const rand = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+// 一个场景的出现/消失：返回透明度和上浮量
+const life = (t, a, b, fin = 0.7, fout = 0.5) => { const i = ease(seg(t, a, a + fin)), o = 1 - inOut(seg(t, b - fout, b)); return { a: Math.min(i, o), dy: (1 - i) * 36 - (1 - o) * 18 }; };
+
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+// 按进度描一条折线（“画”出来的效果）
+function drawPath(pts, k) {
+  if (k <= 0) return;
+  let total = 0; const L = [];
+  for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); L.push(d); total += d; }
+  let left = total * k; ctx.beginPath(); ctx.moveTo(...pts[0]);
+  for (let i = 1; i < pts.length && left > 0; i++) { const f = Math.min(1, left / L[i - 1]); ctx.lineTo(lerp(pts[i - 1][0], pts[i][0], f), lerp(pts[i - 1][1], pts[i][1], f)); left -= L[i - 1]; }
+  ctx.stroke();
+}
+function arc(cx, cy, r, a0, a1, k) { if (k <= 0) return; ctx.beginPath(); ctx.arc(cx, cy, r, a0, lerp(a0, a1, k)); ctx.stroke(); }
+
+// ---------- 素材 ----------
+const load = (src) => new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.src = src; });
+let CLIP2D = [], CLIP3D = [], STILLS = [], PCB = null;
+const pad = (n) => String(n).padStart(3, '0');
+
+// 纸张颗粒：预先生成几张噪点图，轮流叠加
+const GRAIN = Array.from({ length: 4 }, (_, k) => {
+  const c = document.createElement('canvas'); c.width = 540; c.height = 960; const g = c.getContext('2d');
+  const d = g.createImageData(540, 960);
+  for (let i = 0; i < d.data.length; i += 4) { const v = rand(i * 0.37 + k * 1000) * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0); return c;
+});
+
+// ---------- 通用版式：章节号 + 标题 + 说明 ----------
+function chapter(t, a, b, num, title, caption) {
+  const L = life(t, a + 0.3, b);
+  if (L.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  ctx.fillStyle = C.accent; ctx.font = F(600, 34); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  ctx.fillText(num, M, 1300);
+  ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(M + 70, 1289); ctx.lineTo(M + 70 + 80 * ease(seg(t, a + 0.5, a + 1.3)), 1289); ctx.stroke();
+  ctx.fillStyle = C.ink; ctx.font = F(600, 118); ctx.fillText(title, M - 6, 1450);
+  ctx.globalAlpha = L.a * ease(seg(t, a + 0.8, a + 1.6));
+  ctx.fillStyle = C.mute; ctx.font = F(400, 38); ctx.fillText(caption, M, 1530);
+  ctx.restore();
+}
+
+// 图片卡片：圆角 + 细边框 + 柔和阴影
+function card(img, x, y, w, h, alpha = 1, zoom = 1) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.shadowColor = 'rgba(60,40,20,0.16)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 18;
+  rr(x, y, w, h, 26); ctx.fillStyle = C.card; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.save(); rr(x, y, w, h, 26); ctx.clip();
+  const iw = w * zoom, ih = iw * img.height / img.width;
+  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+  ctx.restore();
+  rr(x, y, w, h, 26); ctx.strokeStyle = 'rgba(31,29,26,0.18)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 各个场景 ----------
+function sceneIdea(t) {               // 0–4：光标打字
+  const L = life(t, 0.2, 4.0, 0.6, 0.5); if (L.a <= 0) return;
+  const text = '有一个想法。', n = Math.floor(clamp((t - 0.9) / 0.16, 0, text.length));
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  ctx.fillStyle = C.ink; ctx.font = F(600, 104); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const s = text.slice(0, n); ctx.fillText(s, M - 6, 980);
+  const cx = M + ctx.measureText(s).width + 8;
+  if (Math.floor(t * 2.2) % 2 === 0 || (t > 0.9 && t < 0.9 + text.length * 0.16)) { ctx.fillStyle = C.accent; ctx.fillRect(cx, 890, 7, 108); }
+  ctx.restore();
+}
+
+function sceneTell(t) {               // 4–8：对话气泡
+  const L = life(t, 4.0, 8.0); if (L.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const k = inOut(seg(t, 4.2, 5.4));
+  const x = M, y = 560, w = 700, h = 300, r = 60;
+  drawPath([[x + r, y], [x + w - r, y]], k); arc(x + w - r, y + r, r, -Math.PI / 2, 0, seg(k, 0.2, 0.35) > 0 ? seg(k, 0.15, 0.3) : 0);
+  drawPath([[x + w, y + r], [x + w, y + h - r]], seg(k, 0.3, 0.45)); arc(x + w - r, y + h - r, r, 0, Math.PI / 2, seg(k, 0.45, 0.55));
+  drawPath([[x + w - r, y + h], [x + 180, y + h], [x + 110, y + h + 90], [x + 120, y + h], [x + r, y + h]], seg(k, 0.55, 0.8));
+  arc(x + r, y + h - r, r, Math.PI / 2, Math.PI, seg(k, 0.8, 0.88)); drawPath([[x, y + h - r], [x, y + r]], seg(k, 0.88, 0.95)); arc(x + r, y + r, r, Math.PI, Math.PI * 1.5, seg(k, 0.95, 1));
+  // 正在输入的三个点
+  for (let i = 0; i < 3; i++) {
+    const b = Math.sin((t - 5.4) * 6 - i * 0.8) * 0.5 + 0.5;
+    ctx.globalAlpha = L.a * seg(t, 5.2, 5.6) * (0.3 + 0.7 * b); ctx.fillStyle = C.accent;
+    ctx.beginPath(); ctx.arc(x + 270 + i * 80, y + h / 2 - b * 8, 14, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = L.a * ease(seg(t, 5.4, 6.2));
+  ctx.fillStyle = C.ink; ctx.font = F(600, 104); ctx.fillText('说给它听。', M - 6, 1220 + (1 - ease(seg(t, 5.4, 6.2))) * 20);
+  ctx.restore();
+}
+
+function sceneSearch(t) {             // 8–12：查方案（细线地球 + 连接节点）
+  const L = life(t, 8.0, 12.0); if (L.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  const cx = 540, cy = 770, R = 290, k = inOut(seg(t, 8.2, 10.0));
+  ctx.strokeStyle = C.line; ctx.lineWidth = 2.5;
+  arc(cx, cy, R, -Math.PI / 2, Math.PI * 1.5, k);
+  for (let i = 1; i <= 2; i++) { const kk = seg(k, 0.2 + i * 0.1, 0.6 + i * 0.1); ctx.save(); ctx.translate(cx, cy); ctx.scale(i * 0.36, 1); ctx.lineWidth = 2.5 / (i * 0.36); arc(0, 0, R, -Math.PI / 2, Math.PI * 1.5, kk); ctx.restore(); }
+  [-0.5, 0, 0.5].forEach((f, i) => { const yy = cy + f * R * 1.2, half = Math.sqrt(R * R - (yy - cy) ** 2); drawPath([[cx - half, yy], [cx + half, yy]], seg(k, 0.4 + i * 0.1, 0.8 + i * 0.1)); });
+  // 节点与连线
+  const N = [[cx - 180, cy - 160], [cx + 150, cy - 60], [cx - 40, cy + 170], [cx + 230, cy + 190]];
+  ctx.strokeStyle = C.accent; ctx.lineWidth = 3;
+  [[0, 1], [1, 2], [2, 3], [1, 3]].forEach(([a, b], i) => drawPath([N[a], N[b]], seg(t, 9.6 + i * 0.25, 10.2 + i * 0.25)));
+  N.forEach(([x, y], i) => { const s = ease(seg(t, 9.4 + i * 0.2, 9.8 + i * 0.2)); ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(x, y, 14 * s, 0, 7); ctx.fill(); ctx.fillStyle = C.bg; ctx.beginPath(); ctx.arc(x, y, 6 * s, 0, 7); ctx.fill(); });
+  ctx.restore();
+  chapter(t, 8.0, 12.0, '01', '查方案', 'QQ 群聊机器人 · 方案调研');
+}
+
+// 把 2D 小克画到离屏画布，再拆成一个个像素格
+const PIX = (() => {
+  const u = 30, c = document.createElement('canvas'); c.width = 15 * u; c.height = 9 * u;
+  const g = c.getContext('2d'); drawXiaoke(g, 7.5 * u, 8.5 * u, u, {});
+  const cells = [], d = g.getImageData(0, 0, c.width, c.height).data, step = u / 2;
+  for (let y = 0; y < c.height; y += step) for (let x = 0; x < c.width; x += step) {
+    const i = (Math.floor(y + step / 2) * c.width + Math.floor(x + step / 2)) * 4;
+    if (d[i + 3] > 128) cells.push({ x, y, c: `rgb(${d[i]},${d[i + 1]},${d[i + 2]})`, r: cells.length });
+  }
+  return { cells, w: c.width, h: c.height, step };
+})();
+function sceneDraw(t) {               // 12–16：像素拼出小克
+  const L = life(t, 12.0, 16.0); if (L.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  const s = 1.7, ox = 540 - PIX.w * s / 2, oy = 780 - PIX.h * s / 2;
+  PIX.cells.forEach((p) => {
+    const st = 12.3 + rand(p.r) * 1.3, k = ease(seg(t, st, st + 0.9));
+    if (k <= 0) return;
+    const fx = (rand(p.r + 7) - 0.5) * 900, fy = (rand(p.r + 3) - 0.5) * 700 - 200;
+    ctx.globalAlpha = L.a * k; ctx.fillStyle = p.c;
+    ctx.fillRect(ox + p.x * s + fx * (1 - k), oy + p.y * s + fy * (1 - k), PIX.step * s + 0.5, PIX.step * s + 0.5);
+  });
+  ctx.restore();
+  chapter(t, 12.0, 16.0, '02', '画角色', '像素角色 · 小克');
+}
+
+function sceneAnim(t) {               // 16–20：2D 动画片段
+  const L = life(t, 16.0, 20.0); if (L.a <= 0) return;
+  const f = CLIP2D[clamp(Math.floor((t - 16.0) * 30), 0, CLIP2D.length - 1)];
+  const w = 470, h = w * 16 / 9, z = lerp(1.0, 1.06, seg(t, 16, 20));
+  card(f, 540 - w / 2, 330 + L.dy, w, h, L.a, z);
+  chapter(t, 16.0, 20.0, '03', '做动画', '40 秒 2D 动画 · 代码合成音效');
+}
+
+function scenePCB(t) {                // 20–24：细线画出真实的走线，最后打勾
+  const L = life(t, 20.0, 24.0); if (L.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  const s = 24, ox = 540, oy = 760; const P = ([x, z]) => [ox + x * s, oy + z * s];
+  ctx.strokeStyle = 'rgba(31,29,26,0.25)'; ctx.lineWidth = 2; rr(ox - 11 * s, oy - 16 * s, 22 * s, 32 * s, 18); ctx.stroke();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  PCB.traces.forEach((tr, i) => {
+    const st = 20.2 + i * 0.045, k = inOut(seg(t, st, st + 0.8));
+    ctx.strokeStyle = tr.layer === 'bot' ? 'rgba(200,100,63,0.45)' : C.line; ctx.lineWidth = tr.layer === 'bot' ? 3 : 3.5;
+    drawPath(tr.pts.map(P), k);
+  });
+  PCB.pads.forEach((p, i) => {
+    const k = ease(seg(t, 20.4 + (i % 20) * 0.04, 20.9 + (i % 20) * 0.04)); if (k <= 0) return;
+    const [x, y] = P([p.x, p.z]); ctx.fillStyle = C.bg; ctx.strokeStyle = C.line; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x, y, 6.5 * k, 0, 7); ctx.fill(); ctx.stroke();
+  });
+  // 对勾
+  const ck = inOut(seg(t, 22.4, 23.0));
+  if (ck > 0) {
+    ctx.fillStyle = 'rgba(244,240,230,0.9)'; ctx.beginPath(); ctx.arc(ox + 150, oy + 190, 92 * ease(seg(t, 22.3, 22.6)), 0, 7); ctx.fill();
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 12; drawPath([[ox + 105, oy + 192], [ox + 140, oy + 228], [ox + 205, oy + 152]], ck);
+  }
+  ctx.restore();
+  chapter(t, 20.0, 24.0, '04', '检查电路', '走线检查：0 短路 · 0 断路');
+}
+
+function scene3D(t) {                 // 24–29：3D 片段
+  const L = life(t, 24.0, 29.0); if (L.a <= 0) return;
+  const f = CLIP3D[clamp(Math.floor((t - 24.0) * 30), 0, CLIP3D.length - 1)];
+  const w = 470, h = w * 16 / 9, z = lerp(1.0, 1.1, inOut(seg(t, 24, 29)));
+  card(f, 540 - w / 2, 330 + L.dy, w, h, L.a, z);
+  chapter(t, 24.0, 29.0, '05', '搭 3D', 'Three.js · 3D 电路板');
+}
+
+function sceneGallery(t) {            // 29–35：作品卡片排开
+  const L = life(t, 29.0, 35.2, 0.6, 0.7); if (L.a <= 0) return;
+  const k = inOut(seg(t, 29.2, 31.0)), w = 250, h = w * 16 / 9;
+  const pos = [[-330, -40, -0.08], [-165, 30, -0.04], [0, -10, 0], [165, 30, 0.04], [330, -40, 0.08]];
+  pos.forEach(([dx, dy, r], i) => {
+    ctx.save(); ctx.translate(540 + dx * k, 760 + dy * k + L.dy + Math.sin(t * 0.8 + i) * 4); ctx.rotate(r * k);
+    card(STILLS[i], -w / 2, -h / 2, w, h, L.a * ease(seg(t, 29.0 + i * 0.12, 29.6 + i * 0.12)));
+    ctx.restore();
+  });
+  const T = life(t, 31.4, 35.2, 0.8, 0.7);
+  ctx.save(); ctx.globalAlpha = T.a; ctx.fillStyle = C.ink; ctx.font = F(600, 110); ctx.textAlign = 'left';
+  ctx.fillText('一次对话。', M - 6, 1450 + T.dy); ctx.restore();
+}
+
+function sceneEnd(t) {                // 35–40：标语 + 署名
+  const L = life(t, 35.4, 40.5, 1.0, 0.5); if (L.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = L.a; ctx.translate(0, L.dy);
+  ctx.fillStyle = C.ink; ctx.font = F(600, 104); ctx.textAlign = 'left';
+  ctx.fillText('想法，', M - 6, 860);
+  ctx.globalAlpha = L.a * ease(seg(t, 36.0, 37.0));
+  ctx.fillText('可以走得更远。', M - 6, 1000 + (1 - ease(seg(t, 36.0, 37.0))) * 20);
+  ctx.strokeStyle = C.accent; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(M, 1070); ctx.lineTo(M + 140 * inOut(seg(t, 36.6, 37.6)), 1070); ctx.stroke();
+  ctx.restore();
+  // 署名：小小的像素小克 + 粉丝自制
+  const s = ease(seg(t, 37.8, 38.6));
+  if (s > 0) {
+    ctx.save(); ctx.globalAlpha = s;
+    drawXiaoke(ctx, 540, 1660, 7, { eyes: Math.floor(t * 1.2) % 4 === 0 ? 'happy' : 'open' });
+    ctx.fillStyle = C.mute; ctx.font = F(400, 32); ctx.textAlign = 'center'; ctx.fillText('粉丝自制 · 非官方', 540, 1730);
+    ctx.restore();
+  }
+}
+
+// ---------- 主渲染 ----------
+window.renderFrame = (t) => {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  // 很淡的暖色光晕
+  const g = ctx.createRadialGradient(780, 420, 50, 780, 420, 1300); g.addColorStop(0, 'rgba(255,236,214,0.55)'); g.addColorStop(1, 'rgba(255,236,214,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  sceneIdea(t); sceneTell(t); sceneSearch(t); sceneDraw(t); sceneAnim(t); scenePCB(t); scene3D(t); sceneGallery(t); sceneEnd(t);
+  // 颗粒
+  ctx.save(); ctx.globalAlpha = 0.05; ctx.globalCompositeOperation = 'multiply';
+  ctx.drawImage(GRAIN[Math.floor(t * 12) % 4], 0, 0, W, H); ctx.restore();
+};
+
+(async () => {
+  await document.fonts.load(F(400, 40)); await document.fonts.load(F(600, 40)); await document.fonts.ready;
+  CLIP2D = await Promise.all(Array.from({ length: 132 }, (_, i) => load(`assets/clip2d/${pad(i + 1)}.jpg`)));
+  CLIP3D = await Promise.all(Array.from({ length: 162 }, (_, i) => load(`assets/clip3d/${pad(i + 1)}.jpg`)));
+  STILLS = await Promise.all([1, 2, 3, 4, 5].map((i) => load(`assets/stills/s${i}.jpg`)));
+  PCB = await (await fetch('assets/pcb.json')).json();
+  window.renderFrame(0);
+  window.ready = true;
+})();
+</script>
