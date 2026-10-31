@@ -343,9 +343,6 @@ function ending(t) {
   ctx.lineWidth = 18; ctx.strokeStyle = '#D97757'; ctx.strokeText('晚安～', 0, 0);
   ctx.fillStyle = '#FFF6D0'; ctx.fillText('晚安～', 0, 0);
   ctx.restore();
-  const k2 = seg(t, 38.9, 39.3);
-  ctx.globalAlpha = k2; ctx.fillStyle = '#FFF6D0'; ctx.font = `bold 52px ${FONT}`; ctx.textAlign = 'center';
-  ctx.fillText('关注我，明天见 ♡', 540, 680 + (1 - k2) * 30); ctx.globalAlpha = 1;
 }
 
 // ---------- 主渲染 ----------
