@@ -1,0 +1,394 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script src="xiaoke.js"></script>
+<script src="timeline.js"></script>
+<script>
+const W = 1080, H = 1920, G = 1420, U = 32;
+const HEAD = 8 * U + 110; // 头顶气泡离地高度
+const ctx = document.getElementById('c').getContext('2d');
+const FONT = '"WenQuanYi Zen Hei", sans-serif';
+
+// ---------- 工具函数 ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const easeInOut = (k) => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const easeOutBack = (k) => { const c = 1.9; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => { const A = hex(a), B = hex(b); return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], k))).join(',')})`; };
+const rand = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const PUNCT = '，。！？～…,.!?~ ';
+
+function charTimes(s) {
+  const out = []; let t = s.t;
+  for (const ch of s.text) { out.push(t); t += TL.charStep * (PUNCT.includes(ch) && ch !== ' ' ? 3 : 1); }
+  return out;
+}
+TL.subtitles.forEach((s) => (s.times = charTimes(s)));
+
+function talking(t) {
+  for (const s of TL.subtitles) {
+    if (t < s.t || t > s.end) continue;
+    const chars = [...s.text];
+    for (let i = 0; i < chars.length; i++) {
+      const d = t - s.times[i];
+      if (d >= 0 && d < 0.07 && !PUNCT.includes(chars[i])) return true;
+    }
+  }
+  return false;
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// 像素图案：字符串数组，'#' 为填充
+function pix(rows, x, y, s, color) {
+  ctx.fillStyle = color;
+  rows.forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') ctx.fillRect(x + i * s, y + j * s, s, s); }));
+}
+const HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
+const STAR = ['..#..', '.###.', '#####', '.###.', '..#..'];
+
+// ---------- 场景元素 ----------
+function background(t) {
+  const night = easeInOut(seg(t, 33, 35.5));
+  ctx.fillStyle = mix('#FFF4E6', '#3A3160', night); ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = mix('#FCE3C8', '#4A4078', night);
+  const off = (t * 12) % 80;
+  for (let y = -80; y < H; y += 80) for (let x = ((y / 80) & 1) * 40 - 80; x < W + 80; x += 80) {
+    ctx.beginPath(); ctx.arc(x + off, y + off, 8, 0, 7); ctx.fill();
+  }
+  // 夜晚：月亮和星星
+  if (night > 0) {
+    ctx.globalAlpha = night;
+    ctx.fillStyle = '#FFE9A8'; ctx.beginPath(); ctx.arc(820, 560, 90, 0, 7); ctx.fill();
+    ctx.fillStyle = mix('#FFF4E6', '#3A3160', night); ctx.beginPath(); ctx.arc(785, 530, 85, 0, 7); ctx.fill();
+    for (let i = 0; i < 14; i++) {
+      const tw = 0.5 + 0.5 * Math.sin(t * 3 + i * 2);
+      ctx.globalAlpha = night * (0.4 + 0.6 * tw);
+      pix(STAR, 60 + rand(i) * 960, 420 + rand(i + 50) * 700, 6, '#FFF6D0');
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 地面
+  ctx.fillStyle = mix('#F7D9B9', '#2C2650', night);
+  ctx.beginPath(); ctx.moveTo(0, G - 20);
+  for (let x = 0; x <= W; x += 30) ctx.lineTo(x, G - 20 + Math.sin(x / 90) * 10);
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+}
+
+function shadow(x, lift, w, t) {
+  const k = 1 / (1 + lift / 300);
+  ctx.fillStyle = `rgba(90,42,30,${0.16 * k})`;
+  ctx.beginPath(); ctx.ellipse(x, G + 6, w * k, w * k * 0.16, 0, 0, 7); ctx.fill();
+}
+
+const CODE = Array.from({ length: 9 }, (_, i) => ({
+  indent: [0, 1, 1, 2, 2, 1, 2, 1, 0][i],
+  parts: Array.from({ length: 1 + Math.floor(rand(i) * 3) }, (_, j) => ({
+    w: 50 + rand(i * 7 + j) * 140, c: ['#FF9E7A', '#8FD6FF', '#B8F28C', '#F7D96B', '#D4A8FF'][Math.floor(rand(i * 3 + j * 5) * 5)],
+  })),
+}));
+
+function monitor(t) {
+  const show = easeOutBack(seg(t, 9.2, 9.6)) * (1 - easeInOut(seg(t, 27, 27.4)));
+  if (show <= 0.001) return;
+  let shake = 0;
+  if (t > 15.2 && t < 16.4) shake = Math.sin(t * 90) * 10 * (1 - seg(t, 15.2, 16.4));
+  const cx = 540 + shake, cy = 690 + Math.sin(t * 2) * 6;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(show, show);
+  ctx.fillStyle = '#5A2A1E'; roundRect(-360, -230, 720, 460, 34); ctx.fill();
+  // 屏幕颜色：正常 → 红（bug）→ 绿（修好）
+  const red = seg(t, 15.2, 15.35) * (1 - seg(t, 25.5, 25.7));
+  const green = seg(t, 25.5, 25.7);
+  let sc = mix('#1F1B2E', '#6A1424', red);
+  if (green > 0) sc = mix('#6A1424', '#1E5A3A', green);
+  ctx.fillStyle = sc; roundRect(-330, -200, 660, 400, 20); ctx.fill();
+  ctx.fillStyle = '#FFB59A'; ctx.beginPath(); ctx.arc(0, 215, 7, 0, 7); ctx.fill();
+
+  if (t < 15.2) {
+    // 代码一行行打出来
+    const prog = clamp((t - 9.8) / 4.4) * CODE.length;
+    CODE.forEach((line, i) => {
+      if (i > prog) return;
+      let x = -290 + line.indent * 40; const y = -165 + i * 40;
+      const k = clamp(prog - i);
+      line.parts.forEach((p) => { ctx.fillStyle = p.c; ctx.fillRect(x, y, p.w * k, 18); x += p.w * k + 18; });
+    });
+    if (t > 9.8 && Math.floor(t * 3) % 2 === 0) {
+      const i = Math.min(CODE.length - 1, Math.floor(prog));
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(-290 + CODE[i].indent * 40 + 240, -165 + i * 40, 12, 22);
+    }
+  } else if (t < 25.5) {
+    // BUG! 闪烁
+    if (Math.floor(t * 4) % 2 === 0 || t > 17) {
+      ctx.fillStyle = '#FFD84D'; ctx.font = `bold 120px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('BUG!', 0, t < 16.5 ? 0 : -110);
+    }
+  } else {
+    // 绿色对勾
+    const k = easeOutBack(seg(t, 25.5, 25.9));
+    ctx.save(); ctx.scale(k, k);
+    ctx.strokeStyle = '#B8F28C'; ctx.lineWidth = 40; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(-110, 0); ctx.lineTo(-30, 80); ctx.lineTo(130, -90); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // 冒烟
+  if (t > 15.4 && t < 18) {
+    for (let i = 0; i < 6; i++) {
+      const st = 15.4 + i * 0.35, k = seg(t, st, st + 1.4);
+      if (k <= 0 || k >= 1) continue;
+      ctx.fillStyle = `rgba(120,110,120,${0.5 * (1 - k)})`;
+      ctx.beginPath(); ctx.arc(cx - 240 + i * 95 + Math.sin(k * 6) * 20, cy - 240 - k * 220, 28 + k * 40, 0, 7); ctx.fill();
+    }
+  }
+}
+
+function keyboard(t) {
+  const show = easeOutBack(seg(t, 9.2, 9.6)) * (1 - easeInOut(seg(t, 21, 21.3)));
+  if (show <= 0.001) return;
+  ctx.save(); ctx.translate(540, G + 10); ctx.scale(show, show);
+  ctx.fillStyle = '#5A2A1E'; roundRect(-190, -40, 380, 70, 14); ctx.fill();
+  for (let r = 0; r < 2; r++) for (let i = 0; i < 9; i++) {
+    const pressed = t > 9.8 && t < 14.6 && rand(i + r * 9 + Math.floor(t * 14)) > 0.8;
+    ctx.fillStyle = pressed ? '#FFB59A' : '#F2E2D0';
+    ctx.fillRect(-170 + i * 38, -28 + r * 30 + (pressed ? 3 : 0), 30, 22);
+  }
+  ctx.restore();
+}
+
+function drawBug(x, y, s, t, wings) {
+  ctx.save(); ctx.translate(x, y);
+  if (wings) {
+    const f = Math.abs(Math.sin(t * 30));
+    ctx.fillStyle = 'rgba(220,240,255,0.85)';
+    ctx.beginPath(); ctx.ellipse(-2 * s, -4 * s, 3 * s, 1.6 * s * f + 0.3 * s, -0.6, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(2 * s, -4 * s, 3 * s, 1.6 * s * f + 0.3 * s, 0.6, 0, 7); ctx.fill();
+  }
+  const leg = Math.sin(t * 25) * 0.4;
+  ctx.fillStyle = '#2A1A14';
+  for (let i = -1; i <= 1; i++) { ctx.fillRect((i * 1.6 - 3.2) * s, (0.2 + leg * (i & 1)) * s, 1.4 * s, 0.6 * s); ctx.fillRect((i * 1.6 + 1.9) * s, (0.2 - leg * (i & 1)) * s, 1.4 * s, 0.6 * s); }
+  ctx.fillRect(-1.6 * s, -4.4 * s, 0.5 * s, 1.4 * s); ctx.fillRect(1.1 * s, -4.4 * s, 0.5 * s, 1.4 * s);
+  ctx.fillStyle = '#6FCB5A'; ctx.fillRect(-2.5 * s, -3 * s, 5 * s, 3.4 * s);
+  ctx.fillStyle = '#4FA83F'; ctx.fillRect(-2.5 * s, -0.2 * s, 5 * s, 0.6 * s);
+  ctx.fillStyle = '#FFFFFF'; ctx.fillRect(-1.6 * s, -2.4 * s, 1.2 * s, 1.2 * s); ctx.fillRect(0.4 * s, -2.4 * s, 1.2 * s, 1.2 * s);
+  ctx.fillStyle = '#2A1A14'; ctx.fillRect(-1.1 * s, -2.0 * s, 0.6 * s, 0.7 * s); ctx.fillRect(0.9 * s, -2.0 * s, 0.6 * s, 0.7 * s);
+  ctx.restore();
+}
+
+const BUG_GROUND = { x: 126, y: G };
+function bugPos(t) {
+  if (t < 16.5 || t > 26) return null;
+  if (t < 19) return { x: 540 + Math.sin(t * 1.7) * 220, y: 760 + Math.sin(t * 2.3) * 80, s: 13, onScreen: true };
+  if (t < 20.5) {
+    const k = easeInOut(seg(t, 19, 20.5)); const sx = 540 + Math.sin(19 * 1.7) * 220, sy = 760 + Math.sin(19 * 2.3) * 80;
+    return { x: lerp(sx, BUG_GROUND.x, k), y: lerp(sy, BUG_GROUND.y, k) - Math.sin(k * Math.PI) * 200, s: lerp(13, 10, k) };
+  }
+  if (t < 24.2) return { x: BUG_GROUND.x + Math.sin(t * 3) * 6, y: BUG_GROUND.y, s: 10 };
+  const k = seg(t, 24.2, 26);
+  return { x: BUG_GROUND.x - k * 260 + Math.sin(k * 14) * 30, y: BUG_GROUND.y - k * 900, s: 10, wings: true };
+}
+
+function magnifier(x, y, t, bug) {
+  ctx.strokeStyle = '#7A4E2E'; ctx.lineWidth = 16; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x + 50, y - 50); ctx.lineTo(x + 105, y - 105); ctx.stroke();
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, 62, 0, 7); ctx.clip();
+  ctx.fillStyle = 'rgba(200,235,255,0.18)'; ctx.fillRect(x - 70, y - 70, 140, 140);
+  if (bug && Math.abs(bug.x - x) < 90 && bug.y > G - 40) drawBug(x + (bug.x - x) * 2, y + 35, 20, t, false);
+  ctx.restore();
+  ctx.strokeStyle = '#5A2A1E'; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(x, y, 62, 0, 7); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(x - 35, y - 40, 14, 14);
+}
+
+function bubble(x, y, text, k, color = '#5A2A1E') {
+  if (k <= 0) return;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  ctx.fillStyle = '#FFFFFF'; roundRect(-55, -60, 110, 110, 30); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-14, 48); ctx.lineTo(0, 76); ctx.lineTo(14, 48); ctx.fill();
+  ctx.fillStyle = color; ctx.font = `bold 80px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+function particles(t) {
+  // 跳舞时飘起来的爱心和星星
+  for (let i = 0; i < 26; i++) {
+    const st = 27 + i * 0.23, k = seg(t, st, st + 2.2);
+    if (k <= 0 || k >= 1) continue;
+    const x = 140 + rand(i) * 800 + Math.sin(k * 8 + i) * 25, y = G - 60 - k * 820;
+    ctx.globalAlpha = Math.sin(k * Math.PI);
+    if (i % 2) pix(HEART, x, y, 9, ['#FF7FA0', '#FF9E7A', '#FF5C8A'][i % 3]);
+    else pix(STAR, x, y, 10, ['#FFD84D', '#8FD6FF', '#B8F28C'][i % 3]);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function sparkles(x, y, t, from, to) {
+  if (t < from || t > to) return;
+  for (let i = 0; i < 4; i++) {
+    const k = ((t - from) * 1.6 + i / 4) % 1;
+    ctx.globalAlpha = Math.sin(k * Math.PI);
+    pix(STAR, x - 170 + i * 100 + Math.sin(i * 5) * 20, y - k * 120, 8, '#FFC83D');
+  }
+  ctx.globalAlpha = 1;
+}
+
+function zzz(x, y, t) {
+  if (t < 34.8) return;
+  for (let i = 0; i < 3; i++) {
+    const k = ((t - 34.8) / 2.2 + i / 3) % 1;
+    ctx.globalAlpha = Math.sin(k * Math.PI);
+    ctx.fillStyle = '#FFF6D0'; ctx.font = `bold ${40 + k * 40}px ${FONT}`; ctx.textAlign = 'center';
+    ctx.fillText('Z', x + 60 + k * 120 + Math.sin(k * 6) * 20, y - k * 220);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 小克的动作 ----------
+function xiaokeState(t) {
+  let x = 540, lift = 0;
+  const p = { eyes: 'open', mouth: 'smile', sx: 1, sy: 1, rot: 0, armL: 0, armR: 0, legs: 0, lookX: 0, lookY: 0 };
+
+  // 呼吸
+  p.sy += Math.sin(t * 3) * 0.015; p.sx -= Math.sin(t * 3) * 0.01;
+
+  if (t < 4) {
+    // 掉下来、弹两下、睁眼
+    if (t < 0.8) { const k = t / 0.8; lift = (1 - k * k) * 1500; p.sx = 0.88; p.sy = 1.18; }
+    else if (t < 1.35) lift = Math.sin(seg(t, 0.85, 1.35) * Math.PI) * 130;
+    else if (t < 1.7) lift = Math.sin(seg(t, 1.35, 1.7) * Math.PI) * 45;
+    const land = [0.8, 1.35, 1.7].filter((l) => t >= l).pop();
+    if (land !== undefined) { const d = t - land; const sq = 0.22 * Math.exp(-d * 14) * Math.cos(d * 26); p.sy = 1 - sq; p.sx = 1 + sq * 0.8; }
+    p.eyes = t < 2.4 ? 'closed' : 'open';
+    p.mouth = t < 2.4 ? 'flat' : 'o';
+    if (t > 2.5) p.lookY = -0.6;
+  } else if (t < 9) {
+    // 左右张望，然后挥手打招呼
+    if (t < 5.8) p.lookX = t < 4.6 ? -lerp(0, 1, seg(t, 4.0, 4.3)) : t < 5.4 ? lerp(-1, 1, seg(t, 4.6, 4.9)) : lerp(1, 0, seg(t, 5.4, 5.7));
+    else { p.armR = 1.6 + Math.sin(t * 12) * 0.7; p.eyes = 'happy'; p.rot = Math.sin(t * 6) * 0.04; }
+  } else if (t < 15.2) {
+    // 敲代码
+    p.lookY = 0.8;
+    if (t > 9.8 && t < 14.6) {
+      p.armL = Math.max(0, Math.sin(t * 34)) * 0.7; p.armR = Math.max(0, Math.sin(t * 34 + Math.PI)) * 0.7;
+      lift = Math.abs(Math.sin(t * 17)) * 6;
+      if (t > 10.5) p.eyes = Math.floor(t * 2) % 3 === 0 ? 'happy' : 'open';
+    }
+  } else if (t < 21) {
+    // 吓一跳
+    p.eyes = 'surprised'; p.mouth = 'o';
+    if (t < 15.9) { const k = seg(t, 15.3, 15.9); lift = Math.sin(k * Math.PI) * 170; p.armL = p.armR = 1.6; p.sy = 1.1; p.sx = 0.92; }
+    else { p.armL = 1.2 + Math.sin(t * 40) * 0.15; p.armR = 1.2 - Math.sin(t * 40) * 0.15; x += Math.sin(t * 50) * 3; }
+    const b = bugPos(t); if (b) { p.lookX = clamp((b.x - x) / 300, -1, 1); p.lookY = clamp((b.y - 1100) / 300, -1, 1); }
+  } else if (t < 27) {
+    // 戴上侦探帽，拿放大镜找 bug
+    p.hat = (1 - easeInOut(seg(t, 21.2, 21.6))) * 30;
+    if (t < 23.4) { x = lerp(540, 400, easeInOut(seg(t, 21.5, 23.4))); if (t > 21.5) { p.legs = t * 14; lift = Math.abs(Math.sin(t * 14)) * 10; } p.lookX = -1; p.lookY = 0.6; p.armL = 0.6; }
+    else if (t < 25.5) {
+      x = 400; p.lookX = -1; p.armL = 0.6;
+      if (t > 23.6) { p.eyes = 'happy'; p.mouth = 'open'; }
+      if (t > 24.2) { p.armL = 1.6 + Math.sin(t * 12) * 0.6; p.lookY = -0.8; }
+    } else {
+      x = lerp(400, 540, easeInOut(seg(t, 25.6, 26.8))); p.eyes = 'happy';
+      if (t > 25.6 && t < 26.8) { p.legs = t * 14; lift = Math.abs(Math.sin(t * 14)) * 10; }
+    }
+  } else if (t < 33) {
+    // 跳舞
+    const beat = (t - 27) / 0.5;
+    lift = Math.abs(Math.sin(beat * Math.PI)) * 70;
+    p.eyes = 'happy'; p.mouth = Math.floor(beat) % 2 ? 'open' : 'smile';
+    p.armL = Math.floor(beat) % 2 ? 1.6 : 0.2; p.armR = Math.floor(beat) % 2 ? 0.2 : 1.6;
+    p.rot = (Math.floor(beat) % 2 ? 1 : -1) * 0.12;
+    for (const s of [28.5, 31]) if (t > s && t < s + 0.5) p.sx = Math.cos(seg(t, s, s + 0.5) * Math.PI * 2);
+    x = 540 + Math.sin((t - 27) * 1.2) * 120;
+  } else {
+    // 打哈欠，然后睡觉
+    if (t < 34.3) { const k = Math.sin(seg(t, 33.3, 34.3) * Math.PI); p.eyes = t > 33.3 ? 'closed' : 'open'; p.mouth = t > 33.3 ? 'open' : 'smile'; p.armL = p.armR = k * 1.4; p.sy += k * 0.08; }
+    else { const k = easeInOut(seg(t, 34.3, 34.8)); p.eyes = 'sleep'; p.mouth = 'flat'; p.sy = lerp(1, 0.88, k) + Math.sin(t * 2.2) * 0.025; p.sx = lerp(1, 1.06, k); }
+  }
+
+  if (talking(t) && p.mouth !== 'o') p.mouth = 'open';
+  // 偶尔眨眼
+  if (p.eyes === 'open' && (t % 3.1) < 0.12 && t > 3) p.eyes = 'closed';
+  return { x, lift, p };
+}
+
+// ---------- 文字 ----------
+function subtitle(t) {
+  for (const s of TL.subtitles) {
+    if (t < s.t || t > s.end) continue;
+    const chars = [...s.text]; const n = s.times.filter((ct) => ct <= t).length;
+    const alpha = 1 - seg(t, s.end - 0.25, s.end);
+    const pop = easeOutBack(seg(t, s.t, s.t + 0.25));
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(540, 330); ctx.scale(pop, pop);
+    ctx.font = `bold 66px ${FONT}`; const w = ctx.measureText(s.text).width + 100;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'; roundRect(-w / 2, -62, w, 124, 62); ctx.fill();
+    ctx.strokeStyle = '#D97757'; ctx.lineWidth = 6; ctx.stroke();
+    ctx.fillStyle = '#5A2A1E'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(chars.slice(0, n).join(''), -w / 2 + 50, 4);
+    ctx.restore();
+  }
+}
+
+function ending(t) {
+  if (t < 38.3) return;
+  const k = easeOutBack(seg(t, 38.3, 38.7));
+  ctx.save(); ctx.translate(540, 520); ctx.scale(k, k); ctx.rotate(Math.sin(t * 3) * 0.03);
+  ctx.font = `bold 150px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 18; ctx.strokeStyle = '#D97757'; ctx.strokeText('晚安～', 0, 0);
+  ctx.fillStyle = '#FFF6D0'; ctx.fillText('晚安～', 0, 0);
+  ctx.restore();
+  const k2 = seg(t, 38.9, 39.3);
+  ctx.globalAlpha = k2; ctx.fillStyle = '#FFF6D0'; ctx.font = `bold 52px ${FONT}`; ctx.textAlign = 'center';
+  ctx.fillText('关注我，明天见 ♡', 540, 680 + (1 - k2) * 30); ctx.globalAlpha = 1;
+}
+
+// ---------- 主渲染 ----------
+window.renderFrame = function (t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // 结尾镜头推近小克
+  const zoom = easeInOut(seg(t, 38, 39.4));
+  const sc = lerp(1, 1.7, zoom);
+  ctx.translate(540, lerp(G, 1500, zoom)); ctx.scale(sc, sc); ctx.translate(-540, -G);
+
+  background(t);
+  monitor(t);
+  const { x, lift, p } = xiaokeState(t);
+  shadow(x, lift, 200, t);
+  const bug = bugPos(t);
+  if (bug && bug.onScreen) drawBug(bug.x, bug.y, bug.s, t, false);
+  drawXiaoke(ctx, x, G - lift, U, p);
+  if (bug && !bug.onScreen) drawBug(bug.x, bug.y, bug.s, t, bug.wings);
+  keyboard(t);
+  if (t > 21.2 && t < 25.5) magnifier(x - 7 * U - 50, G - 55, t, bug);
+
+  // 小气泡、特效
+  bubble(x, G - HEAD - lift, '?', t > 2.6 && t < 4 ? easeOutBack(seg(t, 2.6, 2.85)) : 0);
+  bubble(x + 40 + (t > 4.6 ? 0 : -80), G - HEAD, '?', t > 4 && t < 5.8 ? easeOutBack(seg(t, 4, 4.25)) : 0);
+  bubble(x, G - HEAD - lift, '!', t > 15.3 && t < 16.4 ? easeOutBack(seg(t, 15.3, 15.5)) : 0, '#E0453A');
+  bubble(x + 60, G - HEAD - 70, '!', t > 23.6 && t < 24.4 ? easeOutBack(seg(t, 23.6, 23.8)) : 0, '#E0453A');
+  sparkles(x, G - 280, t, 10.5, 14.6);
+  sparkles(x, G - 280, t, 25.6, 27);
+  particles(t);
+  if (t > 27 && t < 28.2) {
+    // 帽子飞走
+    const k = seg(t, 27, 28.2);
+    ctx.save(); ctx.translate(x + k * 400, G - 8 * U - k * 900); ctx.rotate(k * 8);
+    ctx.fillStyle = '#9A6B45'; ctx.fillRect(-90, -60, 180, 60); ctx.fillStyle = '#7A4E2E'; ctx.fillRect(-120, -10, 240, 20);
+    ctx.restore();
+  }
+  zzz(x, G - 260, t);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  subtitle(t);
+  ending(t);
+  ctx.globalAlpha = 0.55; ctx.fillStyle = t > 34 ? '#FFF6D0' : '#A0614A'; ctx.font = `30px ${FONT}`; ctx.textAlign = 'center';
+  ctx.fillText('粉丝自制 · 非官方', 540, 200); ctx.globalAlpha = 1;
+};
+window.renderFrame(0);
+</script>

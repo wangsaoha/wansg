@@ -94,6 +94,15 @@ function drawXiaoke(ctx, cx, groundY, u, pose = {}) {
     r(mx, my + 0.5, 1, 0.3, XK.mouth);
   }
 
+  // 侦探帽：hat 为下落高度（格），null 表示不戴
+  if (p.hat != null) {
+    const hy = -p.hat;
+    r(3.6, hy - 2.6, 6.8, 2.4, '#9A6B45');
+    for (let i = 0; i < 6; i++) r(4.0 + i * 1.1, hy - 2.2 + (i % 2) * 0.9, 0.5, 0.5, '#B98A5E');
+    r(3.6, hy - 1.0, 6.8, 0.6, '#5E3B22');
+    r(2.4, hy - 0.4, 9.2, 0.7, '#7A4E2E');
+  }
+
   ctx.restore();
 }
 
