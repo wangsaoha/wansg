@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#FFF4E6}canvas{display:block}</style>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script src="xiaoke.js"></script>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+ctx.fillStyle='#FFF4E6';ctx.fillRect(0,0,1080,1920);
+// 圆点背景
+ctx.fillStyle='#FCE3C8';
+for(let y=0;y<1920;y+=80)for(let x=(y/80%2)*40;x<1080;x+=80){ctx.beginPath();ctx.arc(x,y,8,0,7);ctx.fill();}
+ctx.fillStyle='#5A2A1E';ctx.textAlign='center';
+ctx.font='bold 84px "WenQuanYi Zen Hei"';ctx.fillText('小克 定妆图',540,170);
+ctx.font='40px "WenQuanYi Zen Hei"';ctx.fillStyle='#A0614A';ctx.fillText('粉丝自制形象 · 非官方',540,240);
+// 主图
+const shadow=(x,y,w)=>{ctx.fillStyle='rgba(90,42,30,.15)';ctx.beginPath();ctx.ellipse(x,y,w,w*0.18,0,0,7);ctx.fill();};
+shadow(540,860,300);drawXiaoke(ctx,540,850,38,{});
+const poses=[
+ ['打招呼',{eyes:'happy',mouth:'open',armR:1.6}],
+ ['吓一跳',{eyes:'surprised',mouth:'o',armL:1.5,armR:1.5}],
+ ['开心',{eyes:'happy',mouth:'smile',rot:-0.12}],
+ ['睡着了',{eyes:'sleep',mouth:'flat',sy:0.9,sx:1.05}],
+];
+poses.forEach(([name,p],i)=>{
+  const x=i%2?780:300,y=i<2?1300:1740;
+  shadow(x,y+8,150);drawXiaoke(ctx,x,y,18,p);
+  ctx.fillStyle='#5A2A1E';ctx.font='bold 46px "WenQuanYi Zen Hei"';ctx.fillText(name,x,y-200);
+});
+</script>
