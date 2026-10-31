@@ -251,10 +251,12 @@ export function makePCB() {
     return place(g, x, z, 'D' + (i + 1));
   });
 
+  let lastKey = null;
   function setState(s) {
     s = Object.assign({ traces: 1, glow: 0, glowNets: null, leds: 0, ledMask: null, short: false, knob: 0 }, s);
-    drawBoard(bt.g, s); bt.tex.needsUpdate = true;
-    drawGlow(gt.g, s); gt.tex.needsUpdate = true;
+    // 贴图只在板面内容变化时重画（LED 亮灭不需要重画）
+    const key = JSON.stringify([s.traces, s.glow, s.glowNets, s.short]);
+    if (key !== lastKey) { lastKey = key; drawBoard(bt.g, s); bt.tex.needsUpdate = true; drawGlow(gt.g, s); gt.tex.needsUpdate = true; }
     parts.leds.forEach((l, i) => {
       const on = s.ledMask ? s.ledMask[i] * s.leds : s.leds;
       l.userData.mat.emissiveIntensity = on * 1.6; l.userData.halo.material.opacity = on * 0.75;

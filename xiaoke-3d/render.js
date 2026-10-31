@@ -13,7 +13,7 @@ const fs = require('fs'), path = require('path');
   await page.goto('http://127.0.0.1:8765/' + (process.env.PAGE || 'index.html'));
   await page.waitForFunction(() => window.ready === true, null, { timeout: 60000 });
   const grab = async (t, dur) => {
-    const url = await page.evaluate(([t, dur]) => { renderFrame(t, dur); return document.querySelector('canvas').toDataURL('image/png'); }, [t, dur]);
+    const url = await page.evaluate(([t, dur]) => { renderFrame(t, dur); return (document.getElementById('out') || document.querySelector('canvas')).toDataURL('image/png'); }, [t, dur]);
     return Buffer.from(url.split(',')[1], 'base64');
   };
   try {
@@ -25,7 +25,7 @@ const fs = require('fs'), path = require('path');
       for (let f = 0; f < n; f++) {
         const buf = await grab(f / fps, dur);
         if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
-        if (f % 30 === 0) console.log(`frame ${f}/${n}`);
+        if (f % 150 === 0) console.log(`frame ${f}/${n}`);
       }
       ff.stdin.end(); await new Promise((r) => ff.on('close', r));
     }

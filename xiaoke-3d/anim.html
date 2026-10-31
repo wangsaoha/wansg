@@ -1,0 +1,292 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<canvas id="out" width="1080" height="1920"></canvas>
+<script src="timeline.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+<script type="module">
+// 3D 电路板剧情：画板子 → 摆元件 → 连线 → 短路 → 找连锡 → 点亮 → 晚安
+import * as THREE from 'three';
+import { createStage } from './stage.js';
+import { mat } from './xiaoke.js';
+import { SHORT } from './pcb.js';
+
+const W = 1080, H = 1920;
+const { renderer, scene, camera, sun, pcb, xk } = createStage();
+renderer.domElement.style.display = 'none';
+const out = document.getElementById('out'), ctx = out.getContext('2d');
+const hemi = scene.children.find((o) => o.isHemisphereLight);
+const desk = scene.children.find((o) => o.isMesh && o.geometry.type === 'PlaneGeometry');
+const FONT = '"WenQuanYi Zen Hei", sans-serif';
+
+// ---------- 工具 ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+const easeOutBack = (k) => { const c = 1.9; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+const rand = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------- 场景里新加的东西 ----------
+const S = 0.36; xk.root.scale.setScalar(S);
+const HOME = [6.5, 12.8], SWPOS = [1.8, -14.4], INSPECT = [-8.4, 0.6], CELEB = [3, 13.2];
+
+// 连锡（一小坨焊锡）
+const blob = new THREE.Mesh(new THREE.SphereGeometry(0.45, 20, 12), mat('#D9DCE0', 0.25, { metalness: 0.9 }));
+blob.scale.set(1, 0.45, 1.4); blob.position.set(SHORT.at[0], 0.08, SHORT.at[1]); blob.castShadow = true; scene.add(blob);
+
+// 放大镜
+const mag = new THREE.Group();
+const ring = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.16, 12, 40), mat('#5A2A1E', 0.5)); mag.add(ring);
+const glass = new THREE.Mesh(new THREE.CircleGeometry(1.0, 32), new THREE.MeshStandardMaterial({ color: '#CFEFFF', transparent: true, opacity: 0.25, roughness: 0.1 })); mag.add(glass);
+const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 2.2, 12), mat('#7A4E2E', 0.6)); handle.position.set(1.65, -1.65, 0); handle.rotation.z = Math.PI / 4; mag.add(handle);
+mag.visible = false; scene.add(mag);
+
+// 火花和烟
+const sparks = Array.from({ length: 22 }, (_, i) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), new THREE.MeshBasicMaterial({ color: i % 3 ? '#FFD84D' : '#FFFFFF' }));
+  m.userData.dir = V(rand(i) - 0.5, 0.6 + rand(i + 9) * 0.8, rand(i + 4) - 0.5).normalize().multiplyScalar(4 + rand(i + 2) * 5);
+  m.visible = false; scene.add(m); return m;
+});
+const smokes = Array.from({ length: 14 }, (_, i) => {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshStandardMaterial({ color: '#6E6872', transparent: true, opacity: 0, roughness: 1, depthWrite: false }));
+  m.visible = false; scene.add(m); return m;
+});
+
+// ---------- 路径：螃蟹步横着走，偶尔跳一下 ----------
+// 每段：[开始时间, 结束时间, 起点, 终点, 方式]
+const PATH = [
+  [5.2, 6.6, HOME, [-1.5, 12.8], 'walk'],
+  [7.4, 8.8, [-1.5, 12.8], [4.5, 12.8], 'walk'],
+  [9.4, 10.6, [4.5, 12.8], [0.5, 12.8], 'walk'],
+  [10.8, 11.6, [0.5, 12.8], HOME, 'walk'],
+  [14.6, 15.0, HOME, [8.6, 12.8], 'walk'],
+  [15.0, 17.4, [8.6, 12.8], [8.6, -14.4], 'walk'],
+  [17.4, 18.1, [8.6, -14.4], SWPOS, 'walk'],
+  [23.6, 24.6, SWPOS, INSPECT, 'hop'],
+  [24.8, 25.4, INSPECT, [-8.9, 0.6], 'walk'],
+  [25.4, 26.0, [-8.9, 0.6], INSPECT, 'walk'],
+  [28.6, 29.6, INSPECT, SWPOS, 'hop'],
+  [30.6, 31.4, SWPOS, CELEB, 'hop'],
+];
+function where(t) {
+  let pos = HOME, dist = 0, mode = null, k = 0;
+  for (const [a, b, p0, p1, m] of PATH) {
+    const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+    if (t >= b) { pos = p1; dist += m === 'walk' ? len : 0; continue; }
+    if (t > a) { k = (t - a) / (b - a); const kk = m === 'hop' ? ease(k) : k; pos = [lerp(p0[0], p1[0], kk), lerp(p0[1], p1[1], kk)]; dist += m === 'walk' ? len * k : 0; mode = m; }
+    break;
+  }
+  return { pos, dist, mode, k };
+}
+
+// ---------- 元件掉落 ----------
+const ORDER = ['U1', 'J1', 'SW1', 'R1', 'R2', 'C1', 'C2', 'R3', 'R4', 'R5', 'R6', ...Array.from({ length: 8 }, (_, i) => 'D' + (i + 1))];
+function placeParts(t) {
+  ORDER.forEach((n, i) => {
+    const p = pcb.parts[n], st = 5.0 + i * 0.36, k = seg(t, st, st + 0.33);
+    p.visible = t >= st;
+    const home = p.userData.home;
+    p.position.set(home.x, home.y + (1 - k * k) * 26, home.z);
+    const d = t - (st + 0.33), sq = d > 0 ? 0.25 * Math.exp(-d * 12) * Math.cos(d * 30) : 0;
+    p.scale.set(1 + sq, 1 - sq, 1 + sq);
+  });
+}
+
+// ---------- 镜头 ----------
+const CAM = [
+  [0, [0, 62, 52], [0, 0, 2]], [1.4, [0, 58, 50], [0, 0, 2]],
+  [2.6, [10, 15, 26], [5, 1.5, 11]], [4.8, [9, 14, 25], [5, 1.5, 11]],          // 小克落地特写
+  [5.6, [0, 28, 38], [0, 0, 1]], [11.8, [3, 27, 37], [0, 0, 1]],               // 元件掉落
+  [12.6, [0, 64, 26], [0, 0, 0]], [14.4, [0, 64, 26], [0, 0, 0]],              // 俯拍连线
+  [15.2, [15, 24, 24], [6, 0, 2]], [17.4, [9, 26, 6], [2, 0, -11]],            // 跟着小克跑到开关
+  [18.1, [6, 28, 8], [0, 0, -9]], [22.8, [6, 27, 7], [0, 0, -9]],              // 短路
+  [24.2, [-6.5, 18, 13], [-7.4, 0, -0.6]], [28.3, [-6.5, 17, 12], [-7.4, 0, -0.6]],    // 放大镜找连锡
+  [29.4, [6, 28, 8], [0, 0, -9]], [30.4, [6, 28, 8], [0, 0, -9]],              // 再开一次开关
+  [31.6, [2, 22, 34], [2.5, 0, 7]], [36, [-1, 24, 35], [2.5, 0, 7]], [40, [2, 30, 42], [2.5, 0, 6]],
+];
+function setCamera(t) {
+  let i = 0; while (i < CAM.length - 2 && t > CAM[i + 1][0]) i++;
+  const [t0, p0, g0] = CAM[i], [t1, p1, g1] = CAM[i + 1], k = ease(seg(t, t0, t1));
+  const shake = t > 18.5 && t < 19.4 ? (1 - seg(t, 18.5, 19.4)) * 0.6 : 0;
+  camera.position.set(lerp(p0[0], p1[0], k) + Math.sin(t * 80) * shake, lerp(p0[1], p1[1], k), lerp(p0[2], p1[2], k) + Math.cos(t * 70) * shake);
+  camera.lookAt(lerp(g0[0], g1[0], k), lerp(g0[1], g1[1], k), lerp(g0[2], g1[2], k));
+}
+
+// ---------- 说话 ----------
+const PUNCT = '，。！？～…,.!?~ ';
+TL.subtitles.forEach((s) => { s.times = []; let tt = s.t; for (const ch of s.text) { s.times.push(tt); tt += TL.charStep * (PUNCT.includes(ch) && ch !== ' ' ? 3 : 1); } });
+const talking = (t) => TL.subtitles.some((s) => [...s.text].some((ch, i) => { const d = t - s.times[i]; return d >= 0 && d < 0.07 && !PUNCT.includes(ch); }));
+
+// ---------- 小克每一刻的状态 ----------
+function xiaoke(t) {
+  const w = where(t);
+  let [x, z] = w.pos, y = 0, ry = 0;
+  const pose = { eyes: 'open', mouth: 'smile', walkDir: 'side' };
+  if (w.mode === 'walk') pose.walk = w.dist * 2.4;
+  if (w.mode === 'hop') { y = Math.sin(w.k * Math.PI) * 9; pose.armL = pose.armR = 1.2; pose.eyes = 'happy'; }
+
+  if (t < 1.2) y = 60;
+  else if (t < 1.8) { const k = seg(t, 1.2, 1.8); y = (1 - k * k) * 40; pose.eyes = 'closed'; }
+  else if (t < 2.6) { const d = t - 1.8; pose.squash = 0.25 * Math.exp(-d * 8) * Math.cos(d * 22); pose.eyes = 'closed'; }
+  else if (t < 5) { pose.lookX = t < 3.4 ? -1 : t < 4.2 ? 1 : 0; if (t > 4.2) { pose.eyes = 'happy'; pose.armR = 1.3 + Math.sin(t * 12) * 0.4; } }
+  else if (t < 12) { const last = ORDER.findLastIndex((_, i) => t >= 5 + i * 0.36); const p = last >= 0 ? pcb.parts[ORDER[last]].userData.home : null; if (p) pose.lookX = clamp((p.x - x) / 6, -1, 1); if (!w.mode) pose.eyes = 'happy'; }
+  else if (t < 14.6) { pose.eyes = 'happy'; pose.armL = pose.armR = Math.abs(Math.sin(t * 6)) * 1.2; }
+  else if (t < 18.5) { if (t > 18.1) pose.armL = ease(seg(t, 18.1, 18.45)) * 1.0; }
+  else if (t < 23.2) {
+    // 被电飞，落回原地，吓坏了
+    if (t < 19.7) { const k = seg(t, 18.6, 19.7); y = Math.sin(k * Math.PI) * 10; ry = k * Math.PI * 2; pose.squash = -0.1; }
+    pose.eyes = 'surprised'; pose.mouth = 'o'; pose.armL = pose.armR = 1.4 + Math.sin(t * 40) * 0.15;
+    if (t > 19.7) x += Math.sin(t * 50) * 0.08;
+  } else if (t < 28.6) {
+    pose.hat = (1 - ease(seg(t, 23.2, 23.6))) * 6;
+    ry = w.mode === 'hop' ? 0 : -0.35;
+    pose.armR = 1.1;
+    if (t > 26) { pose.eyes = 'happy'; pose.mouth = 'open'; }
+  } else if (t < 31.4) {
+    if (t > 29.6 && t < 30.1) pose.armL = Math.sin(seg(t, 29.6, 30.1) * Math.PI) * 1.0;
+    if (t > 30.2) pose.eyes = 'happy';
+  } else if (t < 36) {
+    // 庆祝：原地蹦 + 转圈
+    const b = (t - 31.4) / 0.5; y = Math.abs(Math.sin(b * Math.PI)) * 2.2;
+    pose.eyes = 'happy'; pose.mouth = Math.floor(b) % 2 ? 'open' : 'smile';
+    pose.armL = Math.floor(b) % 2 ? 1.5 : 0.2; pose.armR = Math.floor(b) % 2 ? 0.2 : 1.5;
+    if (t > 32.5 && t < 33.1) ry = ease(seg(t, 32.5, 33.1)) * Math.PI * 2;
+    if (t > 34.2 && t < 34.8) ry = -ease(seg(t, 34.2, 34.8)) * Math.PI * 2;
+  } else {
+    // 打哈欠然后睡着
+    if (t < 37) { const k = Math.sin(seg(t, 36, 37) * Math.PI); pose.eyes = 'closed'; pose.mouth = 'open'; pose.armL = pose.armR = k * 1.2; }
+    else { pose.eyes = 'closed'; pose.mouth = 'smile'; pose.squash = lerp(0, 0.14, seg(t, 37, 37.4)) + Math.sin(t * 2.2) * 0.02; }
+  }
+  if (talking(t) && pose.mouth !== 'o') pose.mouth = 'open';
+  if (pose.eyes === 'open' && t % 2.7 < 0.12) pose.eyes = 'closed';
+  xk.root.position.set(x, y, z); xk.root.rotation.y = ry;
+  xk.setPose(pose);
+  return { x, y, z };
+}
+
+// ---------- 2D 叠加层 ----------
+function screen(v) { const p = v.clone().project(camera); return [(p.x + 1) / 2 * W, (1 - p.y) / 2 * H]; }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function pix(rows, x, y, s, c) { ctx.fillStyle = c; rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') ctx.fillRect(x + i * s, y + j * s, s, s); })); }
+const HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'], STAR = ['..#..', '.###.', '#####', '.###.', '..#..'];
+
+function bubble(x, y, text, k, color = '#5A2A1E') {
+  if (k <= 0) return;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  ctx.fillStyle = '#FFFFFF'; roundRect(-50, -55, 100, 100, 28); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-12, 43); ctx.lineTo(0, 68); ctx.lineTo(12, 43); ctx.fill();
+  ctx.fillStyle = color; ctx.font = `bold 72px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 0, -2);
+  ctx.restore();
+}
+
+function subtitle(t) {
+  for (const s of TL.subtitles) {
+    if (t < s.t || t > s.end) continue;
+    const n = s.times.filter((ct) => ct <= t).length;
+    ctx.save(); ctx.globalAlpha = 1 - seg(t, s.end - 0.25, s.end);
+    const k = easeOutBack(seg(t, s.t, s.t + 0.25)); ctx.translate(540, 330); ctx.scale(k, k);
+    ctx.font = `bold 66px ${FONT}`; const w = ctx.measureText(s.text).width + 100;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'; roundRect(-w / 2, -62, w, 124, 62); ctx.fill();
+    ctx.strokeStyle = '#D97757'; ctx.lineWidth = 6; ctx.stroke();
+    ctx.fillStyle = '#5A2A1E'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText([...s.text].slice(0, n).join(''), -w / 2 + 50, 4);
+    ctx.restore();
+  }
+}
+
+function overlay(t, me) {
+  const head = screen(V(me.x, me.y + 8 * S + 1.6, me.z));
+  bubble(head[0], head[1] - 40, '?', t > 2.6 && t < 4.2 ? easeOutBack(seg(t, 2.6, 2.85)) : 0);
+  bubble(head[0], head[1] - 40, '!', t > 18.7 && t < 20.2 ? easeOutBack(seg(t, 18.7, 18.9)) : 0, '#E0453A');
+  bubble(head[0], head[1] - 60, '!', t > 26.0 && t < 26.9 ? easeOutBack(seg(t, 26.0, 26.2)) : 0, '#E0453A');
+  // 连锡被清掉时的闪光
+  if (t > 26.8 && t < 28.2) {
+    const [sx, sy] = screen(V(SHORT.at[0], 0.3, SHORT.at[1]));
+    for (let i = 0; i < 5; i++) { const k = ((t - 26.8) * 1.4 + i / 5) % 1; ctx.globalAlpha = Math.sin(k * Math.PI); pix(STAR, sx - 120 + i * 55, sy - 40 - k * 120, 9, '#FFD84D'); }
+    ctx.globalAlpha = 1;
+  }
+  // 庆祝：爱心和星星
+  for (let i = 0; i < 24; i++) {
+    const st = 31.2 + i * 0.2, k = seg(t, st, st + 2.0);
+    if (k <= 0 || k >= 1) continue;
+    const [bx, by] = screen(V(me.x, 1, me.z));
+    ctx.globalAlpha = Math.sin(k * Math.PI);
+    const x = bx - 330 + rand(i) * 660 + Math.sin(k * 8 + i) * 20, y = by - 80 - k * 600;
+    if (i % 2) pix(HEART, x, y, 9, ['#FF7FA0', '#FF9E7A', '#FF5C8A'][i % 3]); else pix(STAR, x, y, 10, ['#FFD84D', '#8FD6FF', '#B8F28C'][i % 3]);
+  }
+  ctx.globalAlpha = 1;
+  // 打呼噜
+  if (t > 37.2) for (let i = 0; i < 3; i++) {
+    const k = ((t - 37.2) / 2 + i / 3) % 1;
+    ctx.globalAlpha = Math.sin(k * Math.PI); ctx.fillStyle = '#FFF6D0'; ctx.font = `bold ${36 + k * 36}px ${FONT}`; ctx.textAlign = 'center';
+    ctx.fillText('Z', head[0] + 40 + k * 110 + Math.sin(k * 6) * 15, head[1] - k * 200);
+  }
+  ctx.globalAlpha = 1;
+  subtitle(t);
+  ctx.globalAlpha = 0.6; ctx.fillStyle = t > 36 ? '#FFF6D0' : '#A0614A'; ctx.font = `30px ${FONT}`; ctx.textAlign = 'center';
+  ctx.fillText('粉丝自制 · 非官方', 540, 200); ctx.globalAlpha = 1;
+}
+
+// ---------- 主渲染 ----------
+const BG_DAY = new THREE.Color('#FFE9D2'), BG_NIGHT = new THREE.Color('#2B2748');
+const DESK_DAY = new THREE.Color('#F3D2B0'), DESK_NIGHT = new THREE.Color('#3A3456');
+window.renderFrame = (t) => {
+  // 板子从天而降
+  const bk = seg(t, 0, 0.7); pcb.root.position.y = (1 - bk * bk) * 20;
+  const bd = t - 0.7; pcb.root.scale.y = bd > 0 ? 1 - 0.3 * Math.exp(-bd * 10) * Math.cos(bd * 28) : 1;
+  placeParts(t);
+
+  // 电路状态
+  const fixed = t > 26.8;
+  const powered = t > 30.0;
+  let leds = 0, mask = null;
+  if (t > 18.5 && t < 18.75) leds = 0.6;               // 短路瞬间闪一下
+  if (powered) {
+    mask = Array.from({ length: 8 }, (_, i) => clamp((t - 30.3 - i * 0.1) / 0.1));
+    leds = t > 31.4 ? (Math.floor((t - 31.4) * 2.8) % 2 === 0 ? 1 : 0.08) : 1; // 555 的节奏：约 1.4 次/秒
+  }
+  pcb.setState({
+    traces: seg(t, 12.5, 17.0), short: t > 12.5 && !fixed,
+    glow: powered ? 0.35 * seg(t, 30.0, 30.6) : 0, leds, ledMask: mask,
+    knob: (t > 18.5 && t < 19.0) || t > 30.0 ? 1 : 0,
+  });
+  const bs = fixed ? 1 - seg(t, 26.8, 27.1) : t > 12.5 ? seg(t, 12.5, 13) : 0;
+  blob.visible = bs > 0; blob.scale.set(bs, 0.45 * bs, 1.4 * bs);
+
+  // 火花和烟
+  sparks.forEach((m, i) => {
+    const k = (t - 18.55 - (i % 4) * 0.05) / 0.7; m.visible = k > 0 && k < 1;
+    if (m.visible) { const d = m.userData.dir; m.position.set(SHORT.at[0] + d.x * k, 0.4 + d.y * k * 1.2 - 6 * k * k, SHORT.at[1] + d.z * k); }
+  });
+  smokes.forEach((m, i) => {
+    const st = 18.7 + i * 0.22, k = seg(t, st, st + 2.2); m.visible = k > 0 && k < 1 && t < 23;
+    const src = i % 2 ? [0, -6] : SHORT.at;
+    m.position.set(src[0] + Math.sin(k * 5 + i) * 0.8, 1.5 + k * 9, src[1]); m.scale.setScalar(0.4 + k * 1.2);
+    m.material.opacity = Math.sin(k * Math.PI) * 0.4;
+  });
+
+  // 放大镜
+  mag.visible = t > 23.6 && t < 28.6;
+  if (mag.visible) {
+    const sx = t < 26 ? lerp(-6.2, SHORT.at[0], ease(seg(t, 24.8, 26))) : SHORT.at[0];
+    mag.position.set(sx, 2.4 + Math.sin(t * 4) * 0.1, SHORT.at[1] + 0.8); mag.rotation.set(-0.9, 0, 0.2);
+  }
+
+  // 夜晚
+  const night = ease(seg(t, 35.5, 37.2));
+  scene.background = BG_DAY.clone().lerp(BG_NIGHT, night);
+  desk.material.color = DESK_DAY.clone().lerp(DESK_NIGHT, night);
+  hemi.intensity = lerp(1.4, 0.5, night); sun.intensity = lerp(2.4, 0.5, night);
+
+  const me = xiaoke(t);
+  setCamera(t);
+  renderer.render(scene, camera);
+  ctx.drawImage(renderer.domElement, 0, 0);
+  overlay(t, me);
+};
+window.renderFrame(0);
+window.ready = true;
+</script>

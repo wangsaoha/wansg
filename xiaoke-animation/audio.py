@@ -29,7 +29,24 @@ def noise(dur, vol=0.2, decay=30.0, lp=0.0):
 def fx(e):
     t, k, p = e['t'], e['type'], e.get('pitch', 1.0)
     if k == 'whistle': put(t, sweep(1800, 500, 0.8, 0.12, 1.5))
-    elif k == 'thud': put(t, sweep(160, 50, 0.35, 0.6, 9)); put(t, noise(0.15, 0.15, 25, 0.05))
+    elif k == 'thud': v = e.get('vol', 1.0); put(t, sweep(160, 50, 0.35, 0.6 * v, 9)); put(t, noise(0.15, 0.15 * v, 25, 0.05))
+    elif k == 'drops':
+        tt, i = t, 0
+        while tt < e['until']:
+            put(tt + 0.33, sweep(900 - (i % 4) * 90, 300, 0.1, 0.22, 30)); tt += e['every']; i += 1
+    elif k == 'draw':
+        n = int(SR * (e['until'] - t)); tt = np.arange(n) / SR
+        hum = 0.05 * np.sin(2 * np.pi * (600 + 200 * np.sin(2 * np.pi * 3 * tt)) * tt) * np.minimum(1, tt / 0.2) * np.minimum(1, (tt[-1] - tt) / 0.2)
+        put(t, hum)
+    elif k == 'click': put(t, noise(0.025, 0.35, 150, 0.5)); put(t + 0.03, noise(0.02, 0.2, 150, 0.5))
+    elif k == 'zap':
+        z = noise(0.6, 0.5, 5) * (np.sin(2 * np.pi * 60 * np.arange(int(SR * 0.6)) / SR) > 0)
+        put(t, z); put(t, sweep(2000, 200, 0.4, 0.2, 5, 'square'))
+    elif k == 'blinks':
+        tt, on = t, True
+        while tt < e['until']:
+            if on: put(tt, ding(2637.0, 0.08, 0.06))
+            tt += 1 / 2.8; on = not on
     elif k == 'boing':
         n = int(SR * 0.45); tt = np.arange(n) / SR
         f = 300 * p * (1 + 0.35 * np.sin(2 * np.pi * 9 * tt) * np.exp(-tt * 5))
@@ -43,8 +60,9 @@ def fx(e):
             put(tt, noise(0.03, 0.18, 120, 0.4)); tt += rng.uniform(0.05, 0.11)
     elif k == 'steps':
         tt = t
+        i = 0
         while tt < e['until']:
-            put(tt, sweep(220, 140, 0.08, 0.25, 30)); tt += 0.225
+            put(tt, sweep(260 if i % 2 else 220, 140, 0.06, 0.2, 40)); tt += e.get('every', 0.225); i += 1
     elif k == 'alarm':
         for i in range(4): put(t + i * 0.3, sweep(880 if i % 2 == 0 else 660, 880 if i % 2 == 0 else 660, 0.15, 0.12, 2, 'square'))
     elif k == 'found':

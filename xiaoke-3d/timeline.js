@@ -1,0 +1,51 @@
+// 3D 电路板剧情的时间轴：画面（anim.html）和音效（../xiaoke-animation/audio.py）共用
+const TL = {
+  "duration": 40,
+  "fps": 30,
+  "charStep": 0.085,
+  "subtitles": [
+    { "t": 2.0, "end": 4.8, "text": "今天来画板子！" },
+    { "t": 6.0, "end": 11.4, "text": "这个放这里…那个放那里～" },
+    { "t": 12.6, "end": 15.6, "text": "连线连线！" },
+    { "t": 19.0, "end": 22.6, "text": "啊！短路了！" },
+    { "t": 26.2, "end": 28.6, "text": "找到了！连锡了～" },
+    { "t": 31.0, "end": 35.4, "text": "成功啦！" },
+    { "t": 37.0, "end": 39.9, "text": "晚安～" }
+  ],
+  "sfx": [
+    { "t": 0.0, "type": "whistle" },
+    { "t": 0.7, "type": "thud" },
+    { "t": 1.8, "type": "thud", "vol": 0.5 },
+    { "t": 1.85, "type": "boing" },
+    { "t": 2.6, "type": "blink" },
+    { "t": 5.0, "type": "drops", "until": 11.6, "every": 0.36 },
+    { "t": 5.2, "type": "steps", "until": 11.6, "every": 0.16 },
+    { "t": 12.5, "type": "draw", "until": 17.0 },
+    { "t": 14.6, "type": "steps", "until": 18.1, "every": 0.11 },
+    { "t": 18.5, "type": "click" },
+    { "t": 18.55, "type": "zap" },
+    { "t": 18.6, "type": "jump" },
+    { "t": 19.0, "type": "click" },
+    { "t": 19.2, "type": "alarm" },
+    { "t": 19.7, "type": "thud", "vol": 0.5 },
+    { "t": 23.2, "type": "pop" },
+    { "t": 23.6, "type": "jump" },
+    { "t": 24.6, "type": "thud", "vol": 0.4 },
+    { "t": 24.8, "type": "steps", "until": 26.0, "every": 0.2 },
+    { "t": 26.0, "type": "found" },
+    { "t": 26.8, "type": "pop", "pitch": 1.6 },
+    { "t": 27.3, "type": "sparkle", "until": 28.2, "every": 0.18 },
+    { "t": 28.6, "type": "jump" },
+    { "t": 29.6, "type": "thud", "vol": 0.4 },
+    { "t": 30.0, "type": "click" },
+    { "t": 30.3, "type": "success" },
+    { "t": 30.6, "type": "jump" },
+    { "t": 31.4, "type": "thud", "vol": 0.4 },
+    { "t": 31.4, "type": "blinks", "until": 36.0 },
+    { "t": 31.6, "type": "sparkle", "until": 35.4, "every": 0.5 },
+    { "t": 36.0, "type": "yawn" },
+    { "t": 37.6, "type": "snore" },
+    { "t": 39.0, "type": "chime" }
+  ]
+};
+if (typeof module !== 'undefined') module.exports = TL;
