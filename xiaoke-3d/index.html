@@ -1,0 +1,136 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#FFF1E0;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./node_modules/three/build/three.module.js",
+  "three/addons/": "./node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+const W = 1080, H = 1920;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#FFE9D2');
+scene.fog = new THREE.Fog('#FFE9D2', 70, 140);
+const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+
+// 灯光
+scene.add(new THREE.HemisphereLight('#FFF6EA', '#E8B48E', 1.6));
+const sun = new THREE.DirectionalLight('#FFFFFF', 2.2);
+sun.position.set(8, 16, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.radius = 6; sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.05;
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12 });
+scene.add(sun);
+
+// 地面：圆形小舞台
+const mat = (c, r = 0.65) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+const stage = new THREE.Mesh(new THREE.CylinderGeometry(9, 9.4, 1, 64), mat('#F6CFA6'));
+stage.position.y = -0.5; stage.receiveShadow = true; scene.add(stage);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(9.1, 0.18, 12, 96), mat('#E9A97C'));
+rim.rotation.x = Math.PI / 2; scene.add(rim);
+
+// 小克：用圆角方块拼起来，1 个单位 = 2D 版里的 1 格
+const box = (w, h, d, color, r = 0.12) => {
+  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat(color));
+  m.castShadow = true; m.receiveShadow = true; return m;
+};
+const C = { body: '#D97757', shade: '#B85A3C', light: '#F2A585', eye: '#2A1A14', white: '#FFFFFF', blush: '#FF8FA8', mouth: '#5A2A1E' };
+
+const xk = new THREE.Group(); scene.add(xk);
+const torso = new THREE.Group(); xk.add(torso);
+const body = box(10, 6, 6, C.body, 0.45); body.position.y = 5; torso.add(body);
+const belly = box(10.05, 0.8, 6.05, C.shade, 0.2); belly.position.y = 2.4; torso.add(belly);
+const shine = box(2.4, 0.5, 0.2, C.light, 0.1); shine.position.set(-3.3, 7.3, 3.02); torso.add(shine);
+const shine2 = box(0.5, 1.6, 0.2, C.light, 0.1); shine2.position.set(-4.25, 6.75, 3.02); torso.add(shine2);
+
+// 脸
+const face = new THREE.Group(); face.position.set(0, 5, 3.05); torso.add(face);
+const eyes = [];
+[-2.2, 2.2].forEach((x) => {
+  const e = new THREE.Group(); e.position.set(x, 0.6, 0);
+  const ball = box(1.2, 2, 0.3, C.eye, 0.15); e.add(ball);
+  const hi = box(0.5, 0.5, 0.1, C.white, 0.05); hi.position.set(-0.15, 0.55, 0.18); e.add(hi);
+  const hi2 = box(0.25, 0.25, 0.1, C.white, 0.03); hi2.position.set(0.3, -0.5, 0.18); e.add(hi2);
+  face.add(e); eyes.push(e);
+  const blush = box(1.3, 0.7, 0.15, C.blush, 0.1); blush.position.set(x * 1.6, -1.3, 0); face.add(blush);
+});
+const mouth = new THREE.Group(); mouth.position.set(0, -1.1, 0.05); face.add(mouth);
+[[-0.35, 0], [0, -0.3], [0.35, 0]].forEach(([x, y]) => { const m = box(0.35, 0.35, 0.15, C.mouth, 0.05); m.position.set(x, y, 0); mouth.add(m); });
+
+// 手臂（绕肩膀旋转）
+const arms = [-1, 1].map((s) => {
+  const pivot = new THREE.Group(); pivot.position.set(s * 5, 5.5, 0);
+  const a = box(2.2, 2, 2.4, C.body, 0.35); a.position.set(s * 1.1, 0, 0); pivot.add(a);
+  const ab = box(2.25, 0.5, 2.45, C.shade, 0.15); ab.position.set(s * 1.1, -0.8, 0); pivot.add(ab);
+  torso.add(pivot); return pivot;
+});
+
+// 八条小短腿
+const legs = [];
+[-3.5, -1.5, 1.5, 3.5].forEach((x, i) => [-1.6, 1.6].forEach((z, j) => {
+  const l = box(1, 2.2, 1, C.shade, 0.2); l.position.set(x, 1.1, z); xk.add(l); legs.push({ m: l, phase: (i + j) % 2 });
+}));
+
+// 漂浮的星星和爱心（小方块拼成）
+const pixShape = (rows, color, s = 0.5) => {
+  const g = new THREE.Group();
+  rows.forEach((row, j) => [...row].forEach((c, i) => {
+    if (c !== '#') return;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat(color, 0.4));
+    m.position.set((i - row.length / 2) * s, -j * s, 0); m.castShadow = true; g.add(m);
+  }));
+  return g;
+};
+const HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
+const STAR = ['..#..', '.###.', '#####', '.###.', '..#..'];
+const floaters = [];
+for (let i = 0; i < 8; i++) {
+  const f = pixShape(i % 2 ? HEART : STAR, ['#FF7FA0', '#FFD84D', '#FF9E7A', '#8FD6FF'][i % 4]);
+  const a = (i / 8) * Math.PI * 2;
+  f.userData = { a, r: 8.5 + (i % 3), y: 10 + (i % 4) * 3 };
+  scene.add(f); floaters.push(f);
+}
+
+const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
+window.renderFrame = (t, dur = 6) => {
+  // 镜头绕一圈
+  const a = (t / dur) * Math.PI * 2 + 0.35;
+  camera.position.set(Math.sin(a) * 45, 15 + Math.sin(t * 1.1) * 1.5, Math.cos(a) * 45);
+  camera.lookAt(0, 8, 0);
+
+  // 原地蹦跶 + 挤压回弹
+  const hop = Math.abs(Math.sin(t * Math.PI * 1.2));
+  torso.position.y = hop * 1.2;
+  const sq = 1 - Math.max(0, 0.25 - hop) * 0.6;
+  torso.scale.set(2 - sq, sq, 2 - sq);
+  legs.forEach(({ m, phase }) => (m.position.y = 1.1 + (phase ? hop : 1 - hop) * 0.3));
+
+  // 挥手
+  arms[1].rotation.z = 0.9 + Math.sin(t * 9) * 0.5;
+  arms[0].rotation.z = -0.15 + Math.sin(t * 2.4) * 0.1;
+
+  // 眨眼
+  const blink = (t % 2.2) < 0.13 ? 0.12 : 1;
+  eyes.forEach((e) => (e.scale.y = blink));
+
+  floaters.forEach((f, i) => {
+    const u = f.userData, aa = u.a + t * 0.35;
+    f.position.set(Math.sin(aa) * u.r, u.y + Math.sin(t * 2 + i) * 0.6, Math.cos(aa) * u.r);
+    f.rotation.y = t * 1.5 + i;
+  });
+
+  renderer.render(scene, camera);
+};
+window.renderFrame(0);
+window.ready = true;
+</script>
