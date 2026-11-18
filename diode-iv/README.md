@@ -41,3 +41,22 @@
 - `iv_table.csv`：数据表（可以直接填进实验报告）
 
 重新生成：`ngspice -b diode_iv.cir && ngspice -b diode_iv_bv.cir && python3 plot_iv.py`
+
+## 1N4148 仿真
+
+![1N4148 伏安特性](diode_1n4148.png)
+
+模型：常用的 1N4148 SPICE 模型（IS=2.52nA，N=1.752，RS=0.568Ω，与 LTspice 自带库里的参数相同），
+按数据手册补了反向击穿 BV=100V @ 100µA。电路同上，电源从 -120V 扫到 +5V。
+
+| 项目 | 仿真 | 数据手册 |
+|---|---|---|
+| 正向压降 @ 1 mA | 0.585 V | — |
+| 正向压降 @ 10 mA | 0.694 V | ≤ 1.0 V |
+| 反向电流 @ -20 V | 2.5 nA | ≤ 25 nA |
+| 反向电流 @ -75 V | 2.6 nA | ≤ 5 µA |
+| 反向击穿 | 约 100 V | ≥ 100 V |
+
+在 Multisim 里：Place → Diodes → DIODE，Component 选 1N4148，其他步骤一样（电源扫到 -120V 就能看到击穿）。
+
+文件：`diode_1n4148.cir`、`plot_1n4148.py`、`iv_1n4148_table.csv`

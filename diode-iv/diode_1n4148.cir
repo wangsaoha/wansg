@@ -1,0 +1,13 @@
+* 1N4148 伏安特性仿真
+* 模型参数：常用的 1N4148 SPICE 模型（LTspice 自带库里的同一组参数），
+* 另按数据手册补了反向击穿：V(BR) = 100 V @ IR = 100 µA
+V1 in 0 DC 0
+R1 in a 100
+D1 a 0 D1N4148
+.model D1N4148 D(IS=2.52n RS=0.568 N=1.752 CJO=4p M=0.4 TT=20n BV=100 IBV=100u)
+.control
+  dc V1 -120 5 0.005
+  let id = -i(V1)
+  wrdata iv_1n4148.txt v(a) id
+.endc
+.end
