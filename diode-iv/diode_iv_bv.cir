@@ -1,0 +1,11 @@
+* 对照：带反向击穿的二极管（BV=50V），用来展示击穿区
+V1 in 0 DC 0
+R1 in a 100
+D1 a 0 DBV
+.model DBV D(IS=1e-14 N=1 BV=50 IBV=1e-6)
+.control
+  dc V1 -60 5 0.01
+  let id = -i(V1)
+  wrdata iv_bv.txt v(a) id
+.endc
+.end

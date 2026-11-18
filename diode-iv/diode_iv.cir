@@ -1,0 +1,14 @@
+* 二极管伏安特性仿真（不指定型号：使用 SPICE 默认二极管模型）
+* 电路：直流电压源 V1 -> 限流电阻 R1(100Ω) -> 二极管 D1 -> 地
+* 扫描 V1，记录二极管两端电压 V(a) 和流过二极管的电流
+V1 in 0 DC 0
+R1 in a 100
+D1 a 0 DGEN
+* 默认参数：IS=1e-14A, N=1, RS=0, 没有设置反向击穿（BV 无穷大）
+.model DGEN D
+.control
+  dc V1 -10 5 0.005
+  let id = -i(V1)
+  wrdata iv_default.txt v(a) id
+.endc
+.end
