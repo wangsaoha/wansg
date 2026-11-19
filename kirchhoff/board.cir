@@ -1,0 +1,21 @@
+* 基尔霍夫定律实验板（照片上的板子），D = 电源负极那一侧的公共线，作为参考地
+* Us1(+) → A → R1(200Ω) → I1 → B；B → I3 → R3(100Ω) → D；B → I2 → R2(300Ω) → D
+VS  A 0 DC 10
+R1  A n1 200
+VI1 n1 B 0
+VI3 B n3 0
+R3  n3 0 100
+VI2 B n2 0
+R2  n2 0 300
+.control
+  op
+  let uab = v(a)-v(b)
+  let ubd = v(b)
+  let i1 = i(vi1)*1000
+  let i2 = i(vi2)*1000
+  let i3 = i(vi3)*1000
+  print uab ubd i1 i2 i3
+  print i1-i2-i3
+  print -10+uab+ubd
+.endc
+.end
