@@ -1,0 +1,27 @@
+* 基尔霍夫定律实验（图 4.2.2），D 点作为参考地
+* 电流表按理想处理（内阻 0）：在支路里串一个 0V 电压源来测电流
+* VI1 测 I1（A→B），VI2 测 I2（B→D），VI3 测 I3（B→C）
+VS  A 0 DC 10
+R1  A n1 100
+VI1 n1 B 0
+VI2 B n2 0
+R2  n2 0 200
+VI3 B n3 0
+R3  n3 C 200
+R4  C 0 100
+.control
+  op
+  let uab = v(a)-v(b)
+  let ubc = v(b)-v(c)
+  let ubd = v(b)
+  let ucd = v(c)
+  let i1 = i(vi1)*1000
+  let i2 = i(vi2)*1000
+  let i3 = i(vi3)*1000
+  print uab ubc ubd ucd
+  print i1 i2 i3
+  print i1-i2-i3
+  print -10+uab+ubd
+  print ubd-ubc-ucd
+.endc
+.end
