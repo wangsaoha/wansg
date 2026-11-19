@@ -1,0 +1,18 @@
+* 1N4007（整流二极管）伏安特性仿真
+* 模型参数：广泛流传的 1N4007 SPICE 模型（带反向击穿 BV=1000V）
+* 正向：限流电阻 10Ω，电源 0~12V，电流可以到 1A 左右
+* 反向：限流电阻换成 10kΩ，电源扫到 -1100V，看击穿
+V1 in 0 DC 0
+R1 in a 10
+D1 a 0 D1N4007
+.model D1N4007 D(IS=76.9p RS=42.0m BV=1.00k IBV=5.00u CJO=26.5p M=0.333 N=1.45 TT=4.32u)
+.control
+  dc V1 0 12 0.002
+  let id = -i(V1)
+  wrdata iv_1n4007_fwd.txt v(a) id
+  alter R1 = 10k
+  dc V1 -1100 0 0.1
+  let id = -i(V1)
+  wrdata iv_1n4007_rev.txt v(a) id
+.endc
+.end
