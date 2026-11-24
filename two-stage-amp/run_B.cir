@@ -1,0 +1,29 @@
+* 两级阻容耦合放大电路：静态工作点 + 电压放大倍数（空载 / 带 RL=2k）
+.param US=25m
+.include amp_B.lib
+RL d 0 {RLV}
+.param RLV=1e9
+.control
+  op
+  echo "=== 静态工作点 ==="
+  print v(b1) v(c1) v(e1) v(c) v(c2) v(e2)
+  print @q1[ie] @q1[ic] @q2[ie] @q2[ic]
+  print v(b1)-v(e1) v(c1)-v(e1) v(c)-v(e2) v(c2)-v(e2)
+  echo "=== 空载 ==="
+  tran 2u 60m 40m
+  meas tran ui pp v(a)
+  meas tran uo1 pp v(c)
+  meas tran uo2 pp v(d)
+  meas tran omax max v(d)
+  meas tran omin min v(d)
+  alterparam RLV=2k
+  reset
+  echo "=== 带载 RL=2k ==="
+  tran 2u 60m 40m
+  meas tran ui pp v(a)
+  meas tran uo1 pp v(c)
+  meas tran uo2 pp v(d)
+  meas tran omax max v(d)
+  meas tran omin min v(d)
+.endc
+.end
