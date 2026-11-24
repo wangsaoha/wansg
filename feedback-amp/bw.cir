@@ -1,0 +1,17 @@
+* 负反馈放大电路的带宽（空载）：交流扫频，找增益降到 1kHz 值 70.7%（-3dB）的 fL、fH
+.param US=25m RSV=1m RFV=1e12 RLV=1e12
+.include fb_ac.lib
+.control
+  foreach rf 1e12 2k
+    alterparam RFV=$rf
+    reset
+    echo "=== RF=$rf ==="
+    ac dec 200 0.1 1g
+    let g = mag(v(d))/mag(v(a))
+    meas ac g1k find g at=1k
+    let g3 = g1k/sqrt(2)
+    meas ac fl when g=g3 rise=1
+    meas ac fh when g=g3 fall=last
+  end
+.endc
+.end

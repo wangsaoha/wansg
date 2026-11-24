@@ -1,0 +1,33 @@
+* 图 5.1 电压负反馈电路 = 图 4.1 两级放大 + 反馈网络 Cf、Rf
+* 晶体管型号书上没给，用常见的 2N3904 模型代替；C1 容量没标，按 10µF
+.model 2N3904 NPN(Is=6.734f Xti=3 Eg=1.11 Vaf=74.03 Bf=416.4 Ne=1.259 Ise=6.734f Ikf=66.78m Xtb=1.5 Br=.7371 Nc=2 Isc=0 Ikr=0 Rc=1 Cjc=3.638p Mjc=.3085 Vjc=.75 Fc=.5 Cje=4.493p Mje=.2593 Vje=.75 Tr=239.5n Tf=301.2p Itf=.4 Vtf=4 Xtf=2 Rb=10)
+VCC vcc 0 DC 12
+* 信号源：Us 经 Rs(10k) 到 A 点（Ui）
+VS  us 0 DC 0 SIN(0 {US} 1k) AC 1
+RS  us a {RSV}
+C1  a b1 10u
+* 第一级
+RB1 vcc b1 100k
+RB2 b1 0 24k
+RC1 vcc c1 2.2k
+Q1  c1 b1 e1 2N3904
+RE1 e1 e1x 200
+RE1X e1x 0 1.6k
+CE1 e1x 0 100u
+* 级间耦合：C2 从 T1 集电极到 C 点（Uo1，也是 T2 基极）
+C2  c1 c 10u
+RB3 vcc c 47k
+RB4 c 0 15k
+* 第二级
+RC2 vcc c2 2k
+Q2  c2 c e2 2N3904
+RE2 e2 e2x 130
+RE2X e2x 0 1k
+CE2 e2x 0 100u
+* 输出：C3 到 D 点（Uo）
+C3  c2 d 10u
+* 反馈网络：从输出 D 点经 Rf(2k)、Cf(10µF) 接到 T1 发射极（e1）
+* 开环时把 Rf 设成极大，相当于断开
+CF  e1 f 10u
+RF  f d {RFV}
+RL  d 0 {RLV}
