@@ -1,0 +1,27 @@
+* 负反馈放大电路：静态工作点 + 开环/闭环、空载/带载的电压放大倍数
+* 信号直接加在 A 点（Ui 是给定值），1 kHz 正弦
+.param US=25m RSV=1m RFV=1e12 RLV=1e12
+.include fb.lib
+.control
+  op
+  echo "=== 静态工作点（闭环）==="
+  alterparam RFV=2k
+  reset
+  op
+  print v(b1) v(c1) v(e1) v(c) v(c2) v(e2)
+  print @q1[ie] @q1[ic] @q2[ie] @q2[ic]
+  foreach rf 1e12 2k
+    foreach rl 1e12 2k
+      alterparam RFV=$rf
+      alterparam RLV=$rl
+      reset
+      echo "=== RF=$rf RL=$rl ==="
+      tran 2u 80m 60m
+      meas tran ui pp v(a)
+      meas tran uo pp v(d)
+      meas tran omax max v(d)
+      meas tran omin min v(d)
+    end
+  end
+.endc
+.end
