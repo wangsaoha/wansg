@@ -1,0 +1,11 @@
+* 用作比较器/振荡器的运放行为模型（近似 μA741）：
+* 开环增益 2e5、输出饱和约 ±10.5V（±12V 供电）、压摆率约 0.5V/µs、输出电阻 75Ω
+.subckt OPAMP inp inn out
+RIN inp inn 2meg
+BX  x 0 V = 10.5*tanh(2e5*(V(inp)-V(inn))/10.5)
+* 压摆率限制：最大 1mA 给 2nF 充电 → 0.5V/µs
+BG  0 s I = 1m*tanh((V(x)-V(s))/0.1)
+CS  s 0 2n
+ES  e 0 s 0 1
+RO  e out 75
+.ends

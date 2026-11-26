@@ -1,0 +1,20 @@
+* 图 8.1 过零比较器：Ui → R1(10k) → 反相端；同相端经 R2(10k) 接地；输出经 R3(10k)，Dz 双向限幅
+.include opamp.lib
+.include dz.lib
+VI ui 0 SIN(0 1 1k)
+R1 ui n 10k
+R2 p 0 10k
+X1 p n o OPAMP
+R3 o uo 10k
+XZ uo 0 DZBI
+.control
+  tran 1u 6m 2m
+  meas tran uomax max v(uo)
+  meas tran uomin min v(uo)
+  meas tran t1 when v(uo)=0 fall=1
+  meas tran t2 when v(uo)=0 fall=2
+  let f0 = 1/(t2-t1)
+  print f0
+  wrdata cmp.txt v(ui) v(uo)
+.endc
+.end

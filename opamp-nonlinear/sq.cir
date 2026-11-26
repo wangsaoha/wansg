@@ -1,0 +1,25 @@
+* 图 8.2 方波发生电路（按书上的图接）：
+* 反相端 A：经 C(220nF) 接地，经 R2(10k) 接到输出 B
+* 同相端：经 R1(100k) 接地，经 Rf(10k) 接到输出 B（正反馈）
+* 运放输出经 R(1k) 到 B，B 点用 Dz 双向限幅
+.include opamp.lib
+.include dz.lib
+C1 a 0 220n IC=0.1
+R2 a b 10k
+R1 p 0 100k
+RF p b 10k
+X1 p a o OPAMP
+R  o b 1k
+XZ b 0 DZBI
+.control
+  tran 5u 200m 100m uic
+  meas tran uomax max v(b)
+  meas tran uomin min v(b)
+  meas tran amax max v(a)
+  meas tran t1 when v(b)=0 rise=2
+  meas tran t2 when v(b)=0 rise=4
+  let f0 = 2/(t2-t1)
+  print f0
+  wrdata sq.txt v(a) v(b)
+.endc
+.end
