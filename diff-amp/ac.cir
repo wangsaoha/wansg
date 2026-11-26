@@ -1,0 +1,13 @@
+* 交流单端输入、单端输出：Ui = 0.15V 峰峰值，1kHz，T2 基极接地
+.include diff.lib
+V1 b1 0 DC 0 SIN(0 0.075 1k)
+V2 b2 0 DC 0
+.control
+  tran 2u 6m 2m
+  meas tran ui pp v(b1)
+  meas tran uo1 pp v(c1)
+  meas tran uo2 pp v(c2)
+  meas tran c1max max v(c1)
+  meas tran c1min min v(c1)
+.endc
+.end

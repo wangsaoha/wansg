@@ -1,0 +1,24 @@
+* 静态工作点 + 直流差模（Ui1=0.2V, Ui2=0）/ 共模（Ui1=Ui2=0.2V）
+.include diff.lib
+V1 b1 0 DC 0
+V2 b2 0 DC 0
+.control
+  op
+  echo "=== 静态 ==="
+  print v(c1) v(c2) v(w) v(b1) v(b2) v(b3) v(e1) v(e2) v(e3)
+  print @q1[ic] @q2[ic] @q3[ic]
+  alter V1 dc = 0.2
+  op
+  echo "=== 差模单端输入 Ui1=0.2V ==="
+  print v(c1) v(c2) v(c1)-v(c2)
+  alter V2 dc = 0.2
+  op
+  echo "=== 共模输入 Ui1=Ui2=0.2V ==="
+  print v(c1) v(c2) v(c1)-v(c2)
+  echo "=== 小信号直流传输：差模 10mV ==="
+  alter V2 dc = 0
+  alter V1 dc = 0.01
+  op
+  print v(c1) v(c2)
+.endc
+.end

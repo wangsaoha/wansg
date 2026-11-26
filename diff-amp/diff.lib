@@ -1,0 +1,19 @@
+* 图 6.1 直流差动放大电路
+* 假设：Rp 书上没标阻值，按常用的 100Ω、滑动端调在中间（调零）；晶体管用 2N3904 代替
+.model 2N3904 NPN(Is=6.734f Xti=3 Eg=1.11 Vaf=74.03 Bf=416.4 Ne=1.259 Ise=6.734f Ikf=66.78m Xtb=1.5 Br=.7371 Nc=2 Isc=0 Ikr=0 Rc=1 Cjc=3.638p Mjc=.3085 Vjc=.75 Fc=.5 Cje=4.493p Mje=.2593 Vje=.75 Tr=239.5n Tf=301.2p Itf=.4 Vtf=4 Xtf=2 Rb=10)
+VCC vcc 0 DC 12
+VEE vee 0 DC -12
+RC1 vcc c1 10k
+RC2 vcc c2 10k
+Q1  c1 b1 e1 2N3904
+Q2  c2 b2 e2 2N3904
+RB1 b1 0 510
+RB2 b2 0 510
+* Rp 拆成两半，中间是滑动端 w，接 T3 集电极
+RPA e1 w 50
+RPB w e2 50
+* T3 恒流源
+Q3  w b3 e3 2N3904
+R1  vcc b3 62k
+R2  b3 vee 13k
+RE  e3 vee 3k
