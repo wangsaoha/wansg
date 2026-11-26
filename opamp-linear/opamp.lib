@@ -1,0 +1,19 @@
+* 近似 μA741 的行为模型（书上没给运放型号）：开环增益 2e5、主极点约 5Hz、
+* 输入电阻 2MΩ、输入偏置电流 80nA、输出电阻 75Ω、输出摆幅约 ±10.5V（±12V 供电）
+.subckt OPAMP inp inn out
+RIN inp inn 2meg
+IBP inp 0 80n
+IBN inn 0 80n
+EG  g 0 inp inn 1
+RP  g p 1meg
+CP  p 0 31.8n
+EO  o 0 p 0 2e5
+RO  o oc 75
+* 输出限幅
+D1  oc lp DMOD
+D2  ln oc DMOD
+VLP lp 0 10.0
+VLN 0 ln 10.0
+.model DMOD D(IS=1e-15 N=0.5)
+RL  oc out 1
+.ends

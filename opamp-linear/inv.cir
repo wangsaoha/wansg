@@ -1,0 +1,16 @@
+* 图 7.1 反相比例：R1=10k，Rf=100k，R2=10k
+.include opamp.lib
+VI ui 0 DC 0
+R1 ui n 10k
+RF n o 100k
+R2 p 0 10k
+X1 p n o OPAMP
+.control
+  foreach v -0.3 0.3
+    alter VI dc = $v
+    op
+    echo "Ui=$v"
+    print v(n) v(p) v(o) v(o)/v(ui)
+  end
+.endc
+.end

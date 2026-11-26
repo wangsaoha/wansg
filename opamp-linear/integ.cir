@@ -1,0 +1,21 @@
+* 图 7.2 积分电路：R1=10k，C=100nF，Rf=100k（并在 C 两端），R2=10k
+* 正弦 500Hz 500mVpp；方波 1kHz 1Vpp（±0.5V，无直流偏置）
+.include opamp.lib
+VS ui 0 SIN(0 0.25 500)
+R1 ui n 10k
+C1 n o 100n
+RF n o 100k
+R2 p 0 10k
+X1 p n o OPAMP
+.control
+  tran 2u 120m 100m
+  meas tran ui pp v(ui)
+  meas tran uo pp v(o)
+  alter @VS[pulse] = [ -0.5 0.5 0 1u 1u 0.5m 1m ]
+  tran 1u 120m 100m
+  meas tran ui pp v(ui)
+  meas tran uo pp v(o)
+  meas tran omax max v(o)
+  meas tran omin min v(o)
+.endc
+.end
